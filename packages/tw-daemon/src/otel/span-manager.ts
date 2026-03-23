@@ -77,6 +77,12 @@ export class SpanManager {
     return this.getActiveSpans().length > 0
   }
 
+  getAllSpans(entityType?: EntityType): SpanMeta[] {
+    const all = [...this.spans.values()]
+    if (!entityType) return all
+    return all.filter(s => s.entity_type === entityType)
+  }
+
   static stateToStatus(state: Entity['state']): SpanMeta['status'] {
     if (state === 'completed') return 'OK'
     if (state === 'rejected') return 'ERROR'
