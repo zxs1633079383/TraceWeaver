@@ -21,6 +21,24 @@ async function main() {
   const handler = new CommandHandler({ storeDir: STORE_DIR, eventBus, spanManager })
   await handler.init()
 
+  // Conditional MCP startup (when spawned by MCP client with TW_MCP_STDIO=1)
+  if (process.env.TW_MCP_STDIO) {
+    const { McpServer } = await import('./mcp/server.js')
+    const mcp = new McpServer(handler)
+    await mcp.startStdio()
+  }
+
+  // Conditional HTTP startup
+  if (process.env.TW_HTTP_PORT) {
+    const port = parseInt(process.env.TW_HTTP_PORT, 10)
+    const { buildHttpServer } = await import('./http/server.js')
+    const httpServer = buildHttpServer(handler, {
+      inboundToken: process.env.TW_INBOUND_TOKEN,
+    })
+    await httpServer.listen({ port, host: '127.0.0.1' })
+    console.error(`[tw-daemon] HTTP API listening on port ${port}`)
+  }
+
   const server = new IpcServer(SOCKET_PATH, handler, () => { lastActivity = Date.now() })
   await server.start()
 
