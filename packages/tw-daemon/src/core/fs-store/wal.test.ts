@@ -61,6 +61,21 @@ describe('truncate', () => {
     expect(entries).toHaveLength(1)
     expect(entries[0].idempotency_key).toBe('k3')
   })
+
+  it('is a no-op when upToSeq is 0 (nothing to truncate)', async () => {
+    await wal.append({ op: 'upsert_entity', idempotency_key: 'k1', payload: {} })
+    await wal.truncate(0)
+    const entries = await wal.replay()
+    expect(entries).toHaveLength(1)
+  })
+
+  it('removes all entries when upToSeq >= highest seq', async () => {
+    await wal.append({ op: 'upsert_entity', idempotency_key: 'k1', payload: {} })
+    await wal.append({ op: 'upsert_entity', idempotency_key: 'k2', payload: {} })
+    await wal.truncate(100)
+    const entries = await wal.replay()
+    expect(entries).toHaveLength(0)
+  })
 })
 
 describe('seq continuity after restart', () => {

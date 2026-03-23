@@ -21,8 +21,12 @@ export class Wal {
     if (existsSync(this.path)) {
       const raw = await readFile(this.path, 'utf8')
       for (const line of raw.trim().split('\n').filter(Boolean)) {
-        const entry = JSON.parse(line) as WalEntry
-        if (entry.seq > this.seq) this.seq = entry.seq
+        try {
+          const entry = JSON.parse(line) as WalEntry
+          if (entry.seq > this.seq) this.seq = entry.seq
+        } catch {
+          // skip malformed line (e.g., incomplete write at crash)
+        }
       }
     }
     this.opened = true
@@ -49,11 +53,14 @@ export class Wal {
     const seen = new Set<string>()
     const entries: WalEntry[] = []
     for (const line of lines) {
-      const entry = JSON.parse(line) as WalEntry
-      if (!seen.has(entry.idempotency_key)) {
-        seen.add(entry.idempotency_key)
-        entries.push(entry)
-        if (entry.seq > this.seq) this.seq = entry.seq
+      try {
+        const entry = JSON.parse(line) as WalEntry
+        if (!seen.has(entry.idempotency_key)) {
+          seen.add(entry.idempotency_key)
+          entries.push(entry)
+        }
+      } catch {
+        // skip malformed line
       }
     }
     return entries
