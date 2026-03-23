@@ -28,12 +28,14 @@ export function harnessCommand(): Command {
 
   cmd.command('show <id>')
     .description('Show harness content')
-    .action(async (id: string) => {
+    .option('--json', 'Output as JSON')
+    .action(async (id: string, opts) => {
       try {
         await ensureDaemon()
         const res = await sendIpc({ method: 'harness_show', params: { id } })
         if (!res.ok) { console.error(`Error: ${(res as any).error.message}`); process.exit(1) }
         const entry = (res as any).data as any
+        if (opts.json) { console.log(JSON.stringify(entry, null, 2)); return }
         console.log(`# ${entry.id as string}\n`)
         console.log(`applies_to:  ${(entry.applies_to as string[]).join(', ')}`)
         console.log(`trigger_on:  ${(entry.trigger_on as string[]).join(', ')}`)
@@ -41,13 +43,14 @@ export function harnessCommand(): Command {
       } catch (err: any) { console.error(`Error: ${err.message}`); process.exit(1) }
     })
 
-  cmd.command('run <entity-id> <harness-id>')
+  cmd.command('run <entity-id>')
     .description('Manually run a harness against an entity')
+    .requiredOption('--harness-id <id>', 'Harness ID to run')
     .option('--json', 'Output as JSON')
-    .action(async (entityId: string, harnessId: string, opts) => {
+    .action(async (entityId: string, opts) => {
       try {
         await ensureDaemon()
-        const res = await sendIpc({ method: 'harness_run', params: { entity_id: entityId, harness_id: harnessId } })
+        const res = await sendIpc({ method: 'harness_run', params: { entity_id: entityId, harness_id: opts.harnessId } })
         if (!res.ok) { console.error(`Error: ${(res as any).error.message}`); process.exit(1) }
         const result = (res as any).data as any
         if (opts.json) { console.log(JSON.stringify(result, null, 2)); return }
