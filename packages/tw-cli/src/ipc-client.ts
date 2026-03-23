@@ -23,7 +23,7 @@ export class IpcClient {
       const socket = createConnection(this.socketPath)
       const timer = setTimeout(() => {
         socket.destroy()
-        reject(new Error(`IPC timeout after ${this.timeoutMs}ms`))
+        reject(new Error('timeout'))
       }, this.timeoutMs)
 
       let buf = ''
@@ -40,7 +40,7 @@ export class IpcClient {
           }
         }
       })
-      socket.on('error', (e) => { clearTimeout(timer); reject(e) })
+      socket.on('error', (e) => { clearTimeout(timer); socket.destroy(); reject(e) })
       socket.on('connect', () => socket.write(JSON.stringify(req) + '\n'))
     })
   }

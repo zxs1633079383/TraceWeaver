@@ -1,5 +1,6 @@
 // packages/tw-cli/src/daemon-manager.ts
 import { spawn } from 'node:child_process'
+import { createConnection } from 'node:net'
 import { readFile, rm, mkdir } from 'node:fs/promises'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -21,6 +22,7 @@ export function getPidPath(): string {
 export async function isDaemonRunning(): Promise<boolean> {
   try {
     const pid = parseInt(await readFile(getPidPath(), 'utf8'), 10)
+    if (isNaN(pid)) return false
     process.kill(pid, 0)   // throws if process not running
     return true
   } catch {
@@ -57,16 +59,17 @@ export async function ensureDaemonRunning(): Promise<void> {
   })
   child.unref()
 
-  // Wait for socket to appear (up to 5s)
+  // Wait for socket to become connectable (up to 5s)
   const socketPath = getSocketPath()
   const deadline = Date.now() + 5000
   while (Date.now() < deadline) {
-    try {
-      await readFile(socketPath)
-      return // socket file exists
-    } catch {
-      await new Promise(r => setTimeout(r, 100))
-    }
+    const connected = await new Promise<boolean>(resolve => {
+      const sock = createConnection(socketPath)
+      sock.on('connect', () => { sock.destroy(); resolve(true) })
+      sock.on('error', () => resolve(false))
+    })
+    if (connected) return
+    await new Promise(r => setTimeout(r, 100))
   }
   throw new Error('Daemon failed to start within 5s')
 }
@@ -74,6 +77,7 @@ export async function ensureDaemonRunning(): Promise<void> {
 export async function stopDaemon(): Promise<void> {
   try {
     const pid = parseInt(await readFile(getPidPath(), 'utf8'), 10)
+    if (isNaN(pid)) return
     try { process.kill(pid, 'SIGTERM') } catch {}
     try { await rm(getPidPath()) } catch {}
   } catch {

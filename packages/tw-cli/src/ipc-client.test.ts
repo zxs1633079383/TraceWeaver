@@ -1,6 +1,6 @@
 // packages/tw-cli/src/ipc-client.test.ts
 import { describe, it, expect, afterEach } from 'vitest'
-import { createServer, type Server } from 'node:net'
+import { createServer, type Server, type Socket } from 'node:net'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
@@ -8,10 +8,13 @@ import { IpcClient } from './ipc-client.js'
 
 let tmpDir: string
 let server: Server
+const serverSockets = new Set<Socket>()
 
 async function startEchoServer(socketPath: string, response: object) {
   await new Promise<void>(resolve => {
     server = createServer(socket => {
+      serverSockets.add(socket)
+      socket.on('close', () => serverSockets.delete(socket))
       socket.on('data', () => {
         socket.write(JSON.stringify(response) + '\n')
       })
@@ -21,7 +24,9 @@ async function startEchoServer(socketPath: string, response: object) {
 }
 
 afterEach(async () => {
-  server?.close()
+  for (const sock of serverSockets) sock.destroy()
+  serverSockets.clear()
+  await new Promise<void>(resolve => server?.close(() => resolve()) ?? resolve())
   if (tmpDir) await rm(tmpDir, { recursive: true })
 })
 
@@ -42,7 +47,10 @@ describe('IpcClient', () => {
     const socketPath = join(tmpDir, 'tw.sock')
     // server that never responds
     await new Promise<void>(resolve => {
-      server = createServer(() => {})
+      server = createServer(socket => {
+        serverSockets.add(socket)
+        socket.on('close', () => serverSockets.delete(socket))
+      })
       server.listen(socketPath, resolve)
     })
     const client = new IpcClient(socketPath, 100)
