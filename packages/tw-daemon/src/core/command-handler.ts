@@ -11,7 +11,7 @@ import { SpanManager } from '../otel/span-manager.js'
 import type { EventLog } from '../log/event-log.js'
 import type {
   Entity, EntityType, RegisterParams, UpdateStateParams,
-  UpdateAttributesParams, GetStatusParams, ArtifactRef, TwEvent,
+  UpdateAttributesParams, GetStatusParams, ArtifactRef, TwEvent, TwEventType,
 } from '@traceweaver/types'
 
 export interface CommandHandlerOptions {
@@ -266,7 +266,7 @@ export class CommandHandler {
 
   async queryEvents(params: { entity_id?: string; event_type?: string; since?: string; limit?: number }): Promise<any> {
     const history = this.opts.eventLog
-      ? this.opts.eventLog.query({ entity_id: params.entity_id, event_type: params.event_type as any, since: params.since, limit: params.limit })
+      ? this.opts.eventLog.query({ entity_id: params.entity_id, event_type: params.event_type as TwEventType | undefined, since: params.since, limit: params.limit })
       : (this.opts.eventBus?.getHistory(params.since) ?? [])
     let filtered = Array.isArray(history) ? history : []
     if (params.entity_id && !this.opts.eventLog) filtered = filtered.filter((e: any) => e.entity_id === params.entity_id)

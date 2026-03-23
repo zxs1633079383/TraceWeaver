@@ -14,10 +14,20 @@ export interface EventLogQuery {
 export class EventLog {
   private history: EventRecord[] = []
   private seq = 0
+  private dirReady = false
+  private loaded = false
 
   constructor(private readonly logPath: string) {}
 
+  private ensureDir(): void {
+    if (this.dirReady) return
+    mkdirSync(dirname(this.logPath), { recursive: true })
+    this.dirReady = true
+  }
+
   load(): void {
+    if (this.loaded) return
+    this.loaded = true
     if (!existsSync(this.logPath)) return
     const raw = readFileSync(this.logPath, 'utf8')
     for (const line of raw.trim().split('\n').filter(Boolean)) {
@@ -30,10 +40,10 @@ export class EventLog {
   }
 
   append(event: TwEvent): void {
+    this.ensureDir()
     this.seq++
     const record: EventRecord = { ...event, seq: this.seq }
     this.history.push(record)
-    mkdirSync(dirname(this.logPath), { recursive: true })
     appendFileSync(this.logPath, JSON.stringify(record) + '\n', 'utf8')
   }
 

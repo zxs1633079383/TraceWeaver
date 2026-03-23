@@ -77,4 +77,13 @@ describe('EventLog', () => {
     const result = log.query({ limit: 3 })
     expect(result).toHaveLength(3)
   })
+
+  it('calling load() twice does not duplicate history', () => {
+    log.append(makeEvent({ entity_id: 'once' }))
+    // Create a fresh instance pointing to the same file
+    const log2 = new EventLog(join(dir, 'events.ndjson'))
+    log2.load()
+    log2.load() // second call must be a no-op
+    expect(log2.getHistory()).toHaveLength(1)
+  })
 })
