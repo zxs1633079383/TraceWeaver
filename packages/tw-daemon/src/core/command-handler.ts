@@ -1,5 +1,6 @@
 // packages/tw-daemon/src/core/command-handler.ts
 import { join } from 'node:path'
+import { randomUUID } from 'node:crypto'
 import { EntityRegistry } from './engine/entity-registry.js'
 import { Dag } from './engine/dag.js'
 import { Wal } from './fs-store/wal.js'
@@ -30,8 +31,8 @@ export class CommandHandler {
         if (entry.op === 'upsert_entity') {
           const p = entry.payload as RegisterParams
           const entity = this.registry.register(p)
+          this.dag.addNode(p.id)
           if (p.depends_on?.length) {
-            this.dag.addNode(p.id)
             for (const dep of p.depends_on) {
               this.dag.addNode(dep)
               this.dag.addEdge(p.id, dep)
@@ -52,16 +53,19 @@ export class CommandHandler {
           this.dag.removeNode(id)
           this.cache.invalidate(id)
         }
-      } catch {
-        // Skip replay errors (e.g. duplicate registration)
+      } catch (err: unknown) {
+        // Skip expected replay errors (DUPLICATE_ID from re-registering already-known entities).
+        // Unexpected errors are re-thrown so they surface rather than being silently swallowed.
+        const code = (err as { code?: string }).code
+        if (code !== 'DUPLICATE_ID') throw err
       }
     }
   }
 
   async register(params: RegisterParams): Promise<Entity> {
     const entity = this.registry.register(params)
+    this.dag.addNode(params.id)
     if (params.depends_on?.length) {
-      this.dag.addNode(params.id)
       for (const dep of params.depends_on) {
         this.dag.addNode(dep)
         this.dag.addEdge(params.id, dep)
@@ -82,7 +86,7 @@ export class CommandHandler {
     this.cache.set(entity)
     await this.wal.append({
       op: 'update_state',
-      idempotency_key: `update_state-${params.id}-${Date.now()}`,
+      idempotency_key: `update_state-${params.id}-${randomUUID()}`,
       payload: params as unknown as Record<string, unknown>,
     })
     await this.store.writeEntity(entity)
@@ -94,7 +98,7 @@ export class CommandHandler {
     this.cache.set(entity)
     await this.wal.append({
       op: 'update_attributes',
-      idempotency_key: `update_attrs-${params.id}-${Date.now()}`,
+      idempotency_key: `update_attrs-${params.id}-${randomUUID()}`,
       payload: params as unknown as Record<string, unknown>,
     })
     await this.store.writeEntity(entity)
@@ -107,9 +111,10 @@ export class CommandHandler {
     this.registry.remove(id)
     this.dag.removeNode(id)
     this.cache.invalidate(id)
+    await this.store.deleteEntity(id, entity.entity_type)
     await this.wal.append({
       op: 'remove_entity',
-      idempotency_key: `remove-${id}-${Date.now()}`,
+      idempotency_key: `remove-${id}-${randomUUID()}`,
       payload: { id, entity_type: entity.entity_type },
     })
   }

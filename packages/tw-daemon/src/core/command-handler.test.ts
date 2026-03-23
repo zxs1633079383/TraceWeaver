@@ -63,6 +63,23 @@ describe('getStatus', () => {
   })
 })
 
+describe('updateAttributes', () => {
+  it('merges attributes', async () => {
+    await handler.register({ entity_type: 'usecase', id: 'UC-001', attributes: { a: 1 } })
+    const updated = await handler.updateAttributes({ id: 'UC-001', attributes: { b: 2 } })
+    expect(updated.attributes).toEqual({ a: 1, b: 2 })
+  })
+})
+
+describe('remove', () => {
+  it('removes entity from registry and store', async () => {
+    await handler.register({ entity_type: 'usecase', id: 'UC-001' })
+    await handler.remove('UC-001')
+    await expect(handler.getStatus({ id: 'UC-001' }))
+      .rejects.toMatchObject({ code: 'ENTITY_NOT_FOUND' })
+  })
+})
+
 describe('init — WAL replay', () => {
   it('restores state from WAL on re-init', async () => {
     await handler.register({ entity_type: 'usecase', id: 'UC-001' })
