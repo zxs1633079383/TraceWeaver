@@ -8,15 +8,17 @@ import { FsStore } from './fs-store/store.js'
 import { EntityCache } from './fs-store/cache.js'
 import { EventBus } from './event-bus/event-bus.js'
 import { SpanManager } from '../otel/span-manager.js'
+import type { EventLog } from '../log/event-log.js'
 import type {
   Entity, EntityType, RegisterParams, UpdateStateParams,
-  UpdateAttributesParams, GetStatusParams, ArtifactRef,
+  UpdateAttributesParams, GetStatusParams, ArtifactRef, TwEvent,
 } from '@traceweaver/types'
 
 export interface CommandHandlerOptions {
   storeDir: string
   eventBus?: EventBus
   spanManager?: SpanManager
+  eventLog?: EventLog
 }
 
 export class CommandHandler {
@@ -36,6 +38,11 @@ export class CommandHandler {
     const root = this.opts.storeDir
     this.wal   = new Wal(join(root, '.wal'))
     this.store = new FsStore(root)
+  }
+
+  private emit(event: TwEvent): void {
+    this.opts.eventBus?.publish(event)
+    this.opts.eventLog?.append(event)
   }
 
   async init(): Promise<void> {
@@ -95,7 +102,7 @@ export class CommandHandler {
     await this.store.writeEntity(entity)
 
     // Publish event
-    this.opts.eventBus?.publish({
+    this.emit({
       id: randomUUID(),
       type: 'entity.registered',
       entity_id: params.id,
@@ -128,7 +135,7 @@ export class CommandHandler {
     await this.store.writeEntity(entity)
 
     // Publish event
-    this.opts.eventBus?.publish({
+    this.emit({
       id: randomUUID(),
       type: 'entity.state_changed',
       entity_id: params.id,
@@ -162,7 +169,7 @@ export class CommandHandler {
     await this.store.writeEntity(entity)
 
     // Publish event
-    this.opts.eventBus?.publish({
+    this.emit({
       id: randomUUID(),
       type: 'entity.updated',
       entity_id: params.id,
@@ -186,7 +193,7 @@ export class CommandHandler {
     })
 
     // Publish event
-    this.opts.eventBus?.publish({
+    this.emit({
       id: randomUUID(),
       type: 'entity.removed',
       entity_id: id,
@@ -235,7 +242,7 @@ export class CommandHandler {
     }
     const newRefs = [...(entity.artifact_refs ?? []), params.artifact]
     await this.updateAttributes({ id: params.entity_id, attributes: { artifact_refs: newRefs } })
-    this.opts.eventBus?.publish({
+    this.emit({
       id: randomUUID(),
       type: 'artifact.linked',
       entity_id: params.entity_id,
@@ -247,7 +254,7 @@ export class CommandHandler {
 
   async emitEvent(params: { entity_id: string; event: string; attributes?: Record<string, unknown> }): Promise<any> {
     this.opts.spanManager?.addEvent(params.entity_id, params.event, params.attributes)
-    this.opts.eventBus?.publish({
+    this.emit({
       id: randomUUID(),
       type: 'hook.received',
       entity_id: params.entity_id,
@@ -258,10 +265,12 @@ export class CommandHandler {
   }
 
   async queryEvents(params: { entity_id?: string; event_type?: string; since?: string; limit?: number }): Promise<any> {
-    const history = this.opts.eventBus?.getHistory(params.since) ?? []
-    let filtered = history
-    if (params.entity_id) filtered = filtered.filter(e => e.entity_id === params.entity_id)
-    if (params.event_type) filtered = filtered.filter(e => e.type === params.event_type)
+    const history = this.opts.eventLog
+      ? this.opts.eventLog.query({ entity_id: params.entity_id, event_type: params.event_type as any, since: params.since, limit: params.limit })
+      : (this.opts.eventBus?.getHistory(params.since) ?? [])
+    let filtered = Array.isArray(history) ? history : []
+    if (params.entity_id && !this.opts.eventLog) filtered = filtered.filter((e: any) => e.entity_id === params.entity_id)
+    if (params.event_type && !this.opts.eventLog) filtered = filtered.filter((e: any) => e.type === params.event_type)
     const limited = params.limit ? filtered.slice(-params.limit) : filtered
     return { ok: true, data: limited }
   }
