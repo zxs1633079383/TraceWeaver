@@ -191,6 +191,7 @@ export class CommandHandler {
     this.registry.remove(id)
     this.dag.removeNode(id)
     this.cache.invalidate(id)
+    this.impactResolver.index(this.registry.getAll())
     await this.store.deleteEntity(id, entity.entity_type)
     await this.wal.append({
       op: 'remove_entity',
