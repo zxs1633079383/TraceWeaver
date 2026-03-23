@@ -1,0 +1,23 @@
+{
+  "name": "@traceweaver/daemon",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./src/index.ts",
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "dev": "tsx src/index.ts"
+  },
+  "dependencies": {
+    "@traceweaver/types": "*",
+    "js-yaml": "^4.1.0",
+    "uuid": "^9.0.0"
+  },
+  "devDependencies": {
+    "typescript": "*",
+    "vitest": "*",
+    "tsx": "^4.0.0",
+    "@types/js-yaml": "^4.0.9",
+    "@types/uuid": "^9.0.0"
+  }
+}
