@@ -114,3 +114,107 @@ export interface Progress {
   total: number
   percent: number
 }
+
+// ─── Events ────────────────────────────────────────────────────────────────
+
+export type TwEventType =
+  | 'entity.registered'
+  | 'entity.updated'
+  | 'entity.state_changed'
+  | 'entity.removed'
+  | 'artifact.created'
+  | 'artifact.modified'
+  | 'artifact.linked'
+  | 'hook.received'
+  | 'webhook.inbound'
+  | 'git.commit'
+  | 'file.changed'
+
+export interface TwEvent {
+  id: string            // uuid
+  type: TwEventType
+  entity_id?: string
+  entity_type?: EntityType
+  state?: EntityState
+  previous_state?: EntityState
+  attributes?: Record<string, unknown>
+  ts: string            // ISO8601
+}
+
+export interface EventRecord extends TwEvent {
+  seq: number           // monotonically increasing within session
+}
+
+// ─── Trigger Rules ─────────────────────────────────────────────────────────
+
+export interface TriggerOn {
+  event: TwEventType | '*'
+  entity_type?: EntityType
+  state?: EntityState
+}
+
+export type ActionType =
+  | 'propagate'
+  | 'validate'
+  | 'notify'
+  | 'otel'
+  | 'resolve_refs'
+  | 'webhook'
+  | 'exec'
+
+export interface TriggerAction {
+  type: ActionType
+  params?: Record<string, unknown>
+}
+
+export interface TriggerRule {
+  id: string
+  on: TriggerOn
+  actions: TriggerAction[]
+}
+
+// ─── Propagation ────────────────────────────────────────────────────────────
+
+export type PropagateDirection = 'bubble_up' | 'cascade_down'
+
+export interface PropagateInput {
+  direction: PropagateDirection
+  source_id: string
+  source_state: EntityState
+  previous_state: EntityState
+}
+
+export interface PropagateResult {
+  updated: Array<{
+    id: string
+    entity_type: EntityType
+    previous_state: EntityState
+    new_state: EntityState
+  }>
+  progress_updates: Array<{
+    id: string
+    done: number
+    total: number
+  }>
+}
+
+// ─── OTel ────────────────────────────────────────────────────────────────────
+
+export interface SpanMeta {
+  entity_id: string
+  entity_type: EntityType
+  trace_id: string
+  span_id: string
+  parent_span_id?: string
+  start_time: string      // ISO8601
+  end_time?: string
+  status: 'UNSET' | 'OK' | 'ERROR'
+  attributes: Record<string, unknown>
+  events: SpanEvent[]
+}
+
+export interface SpanEvent {
+  name: string
+  ts: string
+  attributes?: Record<string, unknown>
+}
