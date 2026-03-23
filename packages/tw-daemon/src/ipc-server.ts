@@ -10,6 +10,7 @@ export class IpcServer {
   constructor(
     private readonly socketPath: string,
     private readonly handler: CommandHandler,
+    private readonly onActivity?: () => void,
   ) {}
 
   async start(): Promise<void> {
@@ -23,35 +24,40 @@ export class IpcServer {
 
   async stop(): Promise<void> {
     await new Promise<void>((resolve) => {
-      this.server?.close(() => resolve())
+      if (!this.server) { resolve(); return }
+      this.server.close(() => resolve())
     })
     try { await rm(this.socketPath) } catch {}
   }
 
   private handleConnection(socket: Socket): void {
     let buf = ''
-    socket.on('data', async (chunk) => {
-      buf += chunk.toString()
-      const lines = buf.split('\n')
-      buf = lines.pop() ?? ''
-      for (const line of lines) {
-        if (!line.trim()) continue
-        try {
-          const req = JSON.parse(line) as TwRequest
-          const res = await this.dispatch(req)
-          socket.write(JSON.stringify(res) + '\n')
-        } catch (e) {
-          socket.write(JSON.stringify({
-            request_id: 'unknown',
-            ok: false,
-            error: { code: 'PARSE_ERROR', message: String(e) },
-          }) + '\n')
+    socket.on('data', (chunk) => {
+      void (async () => {
+        buf += chunk.toString()
+        const lines = buf.split('\n')
+        buf = lines.pop() ?? ''
+        for (const line of lines) {
+          if (!line.trim()) continue
+          try {
+            const req = JSON.parse(line) as TwRequest
+            const res = await this.dispatch(req)
+            socket.write(JSON.stringify(res) + '\n')
+          } catch (e) {
+            socket.write(JSON.stringify({
+              request_id: 'unknown',
+              ok: false,
+              error: { code: 'PARSE_ERROR', message: String(e) },
+            }) + '\n')
+          }
         }
-      }
+      })().catch(() => socket.destroy())
     })
     socket.on('error', () => socket.destroy())
   }
 
+  // NOTE: Full per-method param validation is deferred to Phase 3 when Zod schemas
+  // will be added for the MCP/HTTP API layer.
   private async dispatch(req: TwRequest): Promise<TwResponse> {
     const { request_id, method, params } = req
     try {
@@ -63,13 +69,17 @@ export class IpcServer {
       } else if (method === 'update_attributes') {
         data = await this.handler.updateAttributes(params as any)
       } else if (method === 'remove') {
-        await this.handler.remove(params.id as string)
+        if (typeof params.id !== 'string') {
+          throw Object.assign(new Error('Missing required param: id'), { code: 'INVALID_PARAMS' })
+        }
+        await this.handler.remove(params.id)
         data = { id: params.id }
       } else if (method === 'get_status') {
         data = await this.handler.getStatus(params as any)
       } else {
         throw Object.assign(new Error(`Unknown method: ${method}`), { code: 'UNKNOWN_METHOD' })
       }
+      this.onActivity?.()
       return { request_id, ok: true, data }
     } catch (e: any) {
       return { request_id, ok: false, error: { code: e.code ?? 'ERROR', message: e.message } }

@@ -15,7 +15,7 @@ async function main() {
   const handler = new CommandHandler(STORE_DIR)
   await handler.init()
 
-  const server = new IpcServer(SOCKET_PATH, handler)
+  const server = new IpcServer(SOCKET_PATH, handler, () => { lastActivity = Date.now() })
   await server.start()
 
   await writeFile(PID_FILE, String(process.pid), 'utf8')
@@ -29,6 +29,7 @@ async function main() {
       cleanup(server).catch(console.error)
     }
   }, 60_000)
+  watchdog.unref()
 
   process.on('SIGTERM', () => cleanup(server).catch(console.error))
   process.on('SIGINT',  () => cleanup(server).catch(console.error))
