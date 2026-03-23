@@ -1,7 +1,7 @@
 import type { EntityState } from '@traceweaver/types'
 import { TransitionError } from '@traceweaver/types'
 
-export const ALLOWED_TRANSITIONS: Readonly<Record<EntityState, EntityState[]>> = {
+export const ALLOWED_TRANSITIONS: Readonly<Record<EntityState, readonly EntityState[]>> = {
   pending:     ['in_progress'],
   in_progress: ['review', 'rejected'],
   review:      ['completed', 'rejected'],

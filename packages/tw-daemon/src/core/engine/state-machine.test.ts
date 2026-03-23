@@ -36,6 +36,9 @@ describe('canTransition', () => {
   it('rejects same-state transition', () => {
     expect(canTransition('in_progress', 'in_progress')).toBe(false)
   })
+  it('returns false for unknown state', () => {
+    expect(canTransition('unknown' as EntityState, 'in_progress')).toBe(false)
+  })
 })
 
 describe('assertTransition', () => {
@@ -46,6 +49,7 @@ describe('assertTransition', () => {
     expect(() => assertTransition('pending', 'completed')).toThrow(TransitionError)
   })
   it('thrown error has code INVALID_TRANSITION', () => {
+    expect.assertions(1)
     try {
       assertTransition('pending', 'completed')
     } catch (e) {
