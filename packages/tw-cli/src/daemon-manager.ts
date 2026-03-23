@@ -84,3 +84,6 @@ export async function stopDaemon(): Promise<void> {
     // PID file missing — daemon not running
   }
 }
+
+/** Alias for ensureDaemonRunning — used by CLI commands. */
+export const ensureDaemon = ensureDaemonRunning

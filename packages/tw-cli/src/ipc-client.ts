@@ -2,8 +2,15 @@
 import { createConnection } from 'node:net'
 import { randomUUID } from 'node:crypto'
 import type { TwRequest, TwResponse } from '@traceweaver/types'
+import { getSocketPath } from './daemon-manager.js'
 
 type SendInput = Pick<TwRequest, 'method' | 'params'>
+
+/** Convenience wrapper: send a single IPC request to the running daemon. */
+export async function sendIpc<T = unknown>(input: Pick<TwRequest, 'method' | 'params'>): Promise<TwResponse<T>> {
+  const client = new IpcClient(getSocketPath())
+  return client.send<T>(input)
+}
 
 export class IpcClient {
   // NOTE: Phase 1 uses a simple request-per-connection model (one socket per send()).
