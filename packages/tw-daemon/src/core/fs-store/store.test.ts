@@ -27,7 +27,7 @@ describe('writeEntity / readEntity', () => {
   it('writes and reads back an entity', async () => {
     await store.writeEntity(entity)
     const result = await store.readEntity('UC-001', 'usecase')
-    expect(result).toMatchObject({ id: 'UC-001', state: 'pending' })
+    expect(result).toEqual(entity)
   })
 
   it('returns null when entity does not exist', async () => {
@@ -42,6 +42,10 @@ describe('listEntities', () => {
     const list = await store.listEntities('usecase')
     expect(list.map(e => e.id).sort()).toEqual(['UC-001', 'UC-002'])
   })
+
+  it('returns empty array when directory does not exist', async () => {
+    expect(await store.listEntities('plan')).toEqual([])
+  })
 })
 
 describe('deleteEntity', () => {
@@ -49,5 +53,9 @@ describe('deleteEntity', () => {
     await store.writeEntity(entity)
     await store.deleteEntity('UC-001', 'usecase')
     expect(await store.readEntity('UC-001', 'usecase')).toBeNull()
+  })
+
+  it('is a no-op when entity does not exist', async () => {
+    await expect(store.deleteEntity('MISSING', 'usecase')).resolves.toBeUndefined()
   })
 })
