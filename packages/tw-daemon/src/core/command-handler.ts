@@ -7,6 +7,8 @@ import { Wal } from './fs-store/wal.js'
 import { FsStore } from './fs-store/store.js'
 import { EntityCache } from './fs-store/cache.js'
 import { EventBus } from './event-bus/event-bus.js'
+import { ImpactResolver } from '../impact/impact-resolver.js'
+import type { ImpactResult } from '../impact/impact-resolver.js'
 import { SpanManager } from '../otel/span-manager.js'
 import type { EventLog } from '../log/event-log.js'
 import type {
@@ -27,6 +29,7 @@ export class CommandHandler {
   private readonly wal: Wal
   private readonly store: FsStore
   private readonly cache = new EntityCache()
+  private readonly impactResolver = new ImpactResolver()
   private readonly opts: CommandHandlerOptions
 
   constructor(rootOrOptions: string | CommandHandlerOptions) {
@@ -82,6 +85,7 @@ export class CommandHandler {
         if (code !== 'DUPLICATE_ID') throw err
       }
     }
+    this.impactResolver.index(this.registry.getAll())
   }
 
   async register(params: RegisterParams): Promise<Entity> {
@@ -94,6 +98,7 @@ export class CommandHandler {
       }
     }
     this.cache.set(entity)
+    this.impactResolver.upsert(entity)
     await this.wal.append({
       op: 'upsert_entity',
       idempotency_key: `register-${params.id}`,
@@ -161,6 +166,7 @@ export class CommandHandler {
   async updateAttributes(params: UpdateAttributesParams): Promise<Entity> {
     const entity = this.registry.updateAttributes(params.id, params.attributes)
     this.cache.set(entity)
+    this.impactResolver.upsert(entity)
     await this.wal.append({
       op: 'update_attributes',
       idempotency_key: `update_attrs-${params.id}-${randomUUID()}`,
@@ -273,5 +279,9 @@ export class CommandHandler {
     if (params.event_type && !this.opts.eventLog) filtered = filtered.filter((e: any) => e.type === params.event_type)
     const limited = params.limit ? filtered.slice(-params.limit) : filtered
     return { ok: true, data: limited }
+  }
+
+  resolveImpact(filePath: string, section?: string): ImpactResult {
+    return this.impactResolver.resolve(filePath, section)
   }
 }
