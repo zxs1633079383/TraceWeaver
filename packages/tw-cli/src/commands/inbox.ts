@@ -7,6 +7,7 @@ export function inboxCommand(): Command {
     .description('View and manage notification inbox')
     .option('--ack <id>', 'Acknowledge an inbox item by ID')
     .option('--unread', 'Show only unread items')
+    .option('--json', 'Output as JSON')
     .action(async (opts) => {
       try {
         await ensureDaemon()
@@ -18,6 +19,7 @@ export function inboxCommand(): Command {
           const res = await sendIpc({ method: 'inbox_list', params: { unackedOnly: !!opts.unread } })
           if (res.ok) {
             const items = (res as any).data as Array<{ id: string; ts: string; message: string; acked: boolean }>
+            if (opts.json) { console.log(JSON.stringify(items, null, 2)); return }
             if (items.length === 0) { console.log('No notifications'); return }
             for (const item of items) {
               const ack = item.acked ? '[read] ' : '[NEW]  '

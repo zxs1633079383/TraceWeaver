@@ -6,12 +6,15 @@ export function dagCommand(): Command {
   return new Command('dag')
     .description('Visualize entity dependency DAG')
     .argument('[entity-id]', 'Root entity ID (defaults to all)')
-    .action(async (entityId) => {
+    .option('--json', 'Output as JSON')
+    .action(async (entityId, opts) => {
       try {
         await ensureDaemon()
         const res = await sendIpc({ method: 'get_dag', params: { root_id: entityId } })
         if (res.ok) {
-          const { nodes, edges } = (res as any).data
+          const data = (res as any).data
+          if (opts.json) { console.log(JSON.stringify(data, null, 2)); return }
+          const { nodes, edges } = data
           console.log(`Nodes: ${nodes.length}, Edges: ${edges.length}`)
           for (const edge of edges) {
             console.log(`  ${edge.from} → ${edge.to}`)

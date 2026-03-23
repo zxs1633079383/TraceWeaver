@@ -9,6 +9,10 @@ import { inboxCommand }    from './commands/inbox.js'
 import { eventsCommand }   from './commands/events.js'
 import { dagCommand }      from './commands/dag.js'
 import { impactCommand }   from './commands/impact.js'
+import { logCommand }      from './commands/log.js'
+import { metricsCommand }  from './commands/metrics.js'
+import { harnessCommand }  from './commands/harness.js'
+import { watchCommand }    from './commands/watch.js'
 
 const program = new Command()
 program
@@ -25,5 +29,9 @@ program.addCommand(inboxCommand())
 program.addCommand(eventsCommand())
 program.addCommand(dagCommand())
 program.addCommand(impactCommand())
+program.addCommand(logCommand())
+program.addCommand(metricsCommand())
+program.addCommand(harnessCommand())
+program.addCommand(watchCommand())
 
 program.parseAsync(process.argv).catch(e => { console.error(e); process.exit(1) })

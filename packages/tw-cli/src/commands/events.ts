@@ -8,6 +8,7 @@ export function eventsCommand(): Command {
     .argument('[entity-id]', 'Filter by entity ID')
     .option('--since <iso>', 'Filter events since ISO timestamp')
     .option('--limit <n>', 'Maximum number of events', '50')
+    .option('--json', 'Output as JSON')
     .action(async (entityId, opts) => {
       try {
         await ensureDaemon()
@@ -21,6 +22,7 @@ export function eventsCommand(): Command {
         })
         if (res.ok) {
           const events = (res as any).data as any[]
+          if (opts.json) { console.log(JSON.stringify(events, null, 2)); return }
           if (events.length === 0) { console.log('No events found'); return }
           for (const ev of events) {
             const entity = ev.entity_id ? ` [${ev.entity_id}]` : ''
