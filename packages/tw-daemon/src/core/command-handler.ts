@@ -6,10 +6,18 @@ import { Dag } from './engine/dag.js'
 import { Wal } from './fs-store/wal.js'
 import { FsStore } from './fs-store/store.js'
 import { EntityCache } from './fs-store/cache.js'
+import { EventBus } from './event-bus/event-bus.js'
+import { SpanManager } from '../otel/span-manager.js'
 import type {
   Entity, EntityType, RegisterParams, UpdateStateParams,
-  UpdateAttributesParams, GetStatusParams
+  UpdateAttributesParams, GetStatusParams, ArtifactRef,
 } from '@traceweaver/types'
+
+export interface CommandHandlerOptions {
+  storeDir: string
+  eventBus?: EventBus
+  spanManager?: SpanManager
+}
 
 export class CommandHandler {
   private readonly registry = new EntityRegistry()
@@ -17,8 +25,15 @@ export class CommandHandler {
   private readonly wal: Wal
   private readonly store: FsStore
   private readonly cache = new EntityCache()
+  private readonly opts: CommandHandlerOptions
 
-  constructor(private readonly root: string) {
+  constructor(rootOrOptions: string | CommandHandlerOptions) {
+    if (typeof rootOrOptions === 'string') {
+      this.opts = { storeDir: rootOrOptions }
+    } else {
+      this.opts = rootOrOptions
+    }
+    const root = this.opts.storeDir
     this.wal   = new Wal(join(root, '.wal'))
     this.store = new FsStore(root)
   }
@@ -78,10 +93,31 @@ export class CommandHandler {
       payload: params as unknown as Record<string, unknown>,
     })
     await this.store.writeEntity(entity)
+
+    // Publish event
+    this.opts.eventBus?.publish({
+      id: randomUUID(),
+      type: 'entity.registered',
+      entity_id: params.id,
+      entity_type: params.entity_type,
+      ts: new Date().toISOString(),
+    })
+    // Create OTel span
+    const parentSpan = params.parent_id ? this.opts.spanManager?.getSpan(params.parent_id) : undefined
+    this.opts.spanManager?.createSpan({
+      entity_id: params.id,
+      entity_type: params.entity_type,
+      parent_span_id: parentSpan?.span_id,
+    })
+
     return entity
   }
 
   async updateState(params: UpdateStateParams): Promise<Entity> {
+    // Capture previous state before update
+    const before = this.registry.get(params.id)
+    const previousState = before?.state
+
     const entity = this.registry.updateState(params.id, params.state, params.reason)
     this.cache.set(entity)
     await this.wal.append({
@@ -90,6 +126,28 @@ export class CommandHandler {
       payload: params as unknown as Record<string, unknown>,
     })
     await this.store.writeEntity(entity)
+
+    // Publish event
+    this.opts.eventBus?.publish({
+      id: randomUUID(),
+      type: 'entity.state_changed',
+      entity_id: params.id,
+      entity_type: entity.entity_type,
+      state: params.state,
+      previous_state: previousState,
+      ts: new Date().toISOString(),
+    })
+    // Add OTel event
+    this.opts.spanManager?.addEvent(params.id, `state_changed_to_${params.state}`, {
+      from: previousState,
+      reason: params.reason,
+    })
+    // End span on terminal states
+    if (params.state === 'completed' || params.state === 'rejected') {
+      const status = SpanManager.stateToStatus(params.state)
+      this.opts.spanManager?.endSpan(params.id, status)
+    }
+
     return entity
   }
 
@@ -102,6 +160,15 @@ export class CommandHandler {
       payload: params as unknown as Record<string, unknown>,
     })
     await this.store.writeEntity(entity)
+
+    // Publish event
+    this.opts.eventBus?.publish({
+      id: randomUUID(),
+      type: 'entity.updated',
+      entity_id: params.id,
+      ts: new Date().toISOString(),
+    })
+
     return entity
   }
 
@@ -117,6 +184,14 @@ export class CommandHandler {
       idempotency_key: `remove-${id}-${randomUUID()}`,
       payload: { id, entity_type: entity.entity_type },
     })
+
+    // Publish event
+    this.opts.eventBus?.publish({
+      id: randomUUID(),
+      type: 'entity.removed',
+      entity_id: id,
+      ts: new Date().toISOString(),
+    })
   }
 
   async getStatus(params: GetStatusParams): Promise<any> {
@@ -129,5 +204,65 @@ export class CommandHandler {
     const all = this.registry.getAll()
     const done = all.filter(e => e.state === 'completed').length
     return { total: all.length, done, percent: all.length ? Math.round(done / all.length * 100) : 0 }
+  }
+
+  // ─── New API methods (Phase 2) ────────────────────────────────────────────
+
+  async get(params: { id: string }): Promise<any> {
+    const entity = this.registry.get(params.id)
+    if (!entity) {
+      return { ok: false, error: { code: 'ENTITY_NOT_FOUND', message: `Entity ${params.id} not found` } }
+    }
+    return { ok: true, data: entity }
+  }
+
+  getDagSnapshot(): { nodes: Array<{ id: string; entity_type: string }>; edges: Array<{ from: string; to: string }> } {
+    const entities = this.registry.getAll()
+    const nodes = entities.map(e => ({ id: e.id, entity_type: e.entity_type }))
+    const edges: Array<{ from: string; to: string }> = []
+    for (const e of entities) {
+      for (const dep of e.depends_on ?? []) {
+        edges.push({ from: e.id, to: dep })
+      }
+    }
+    return { nodes, edges }
+  }
+
+  async linkArtifact(params: { entity_id: string; artifact: ArtifactRef }): Promise<any> {
+    const entity = this.registry.get(params.entity_id)
+    if (!entity) {
+      return { ok: false, error: { code: 'ENTITY_NOT_FOUND', message: `Entity ${params.entity_id} not found` } }
+    }
+    const newRefs = [...(entity.artifact_refs ?? []), params.artifact]
+    await this.updateAttributes({ id: params.entity_id, attributes: { artifact_refs: newRefs } })
+    this.opts.eventBus?.publish({
+      id: randomUUID(),
+      type: 'artifact.linked',
+      entity_id: params.entity_id,
+      ts: new Date().toISOString(),
+      attributes: { artifact: params.artifact as unknown as Record<string, unknown> },
+    })
+    return { ok: true, data: { entity_id: params.entity_id, artifact_ref: `${params.artifact.type}:${params.artifact.path}` } }
+  }
+
+  async emitEvent(params: { entity_id: string; event: string; attributes?: Record<string, unknown> }): Promise<any> {
+    this.opts.spanManager?.addEvent(params.entity_id, params.event, params.attributes)
+    this.opts.eventBus?.publish({
+      id: randomUUID(),
+      type: 'hook.received',
+      entity_id: params.entity_id,
+      ts: new Date().toISOString(),
+      attributes: { event: params.event, ...params.attributes },
+    })
+    return { ok: true, data: { event_id: randomUUID(), timestamp: new Date().toISOString() } }
+  }
+
+  async queryEvents(params: { entity_id?: string; event_type?: string; since?: string; limit?: number }): Promise<any> {
+    const history = this.opts.eventBus?.getHistory(params.since) ?? []
+    let filtered = history
+    if (params.entity_id) filtered = filtered.filter(e => e.entity_id === params.entity_id)
+    if (params.event_type) filtered = filtered.filter(e => e.type === params.event_type)
+    const limited = params.limit ? filtered.slice(-params.limit) : filtered
+    return { ok: true, data: limited }
   }
 }
