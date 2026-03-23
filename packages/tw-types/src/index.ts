@@ -11,10 +11,13 @@ export type EntityState =
   | 'completed'
   | 'rejected'
 
+// TODO: Used in Phase 2 (OTel + Event System) for UseCase mutation tracking
 export type UsecaseMutation = 'new' | 'replace' | 'modify' | 'append'
 
+export type ArtifactType = 'prd' | 'design' | 'code' | 'test' | string  // string allows custom types
+
 export interface ArtifactRef {
-  type: string   // prd | design | code | test
+  type: ArtifactType
   path: string
   section?: string
 }
@@ -82,6 +85,10 @@ export interface UpdateAttributesParams {
 export interface GetStatusParams {
   id?: string
   format?: 'summary' | 'tree'
+}
+
+export interface RemoveEntityParams {
+  id: string
 }
 
 // ─── WAL ──────────────────────────────────────────────────────────────────
