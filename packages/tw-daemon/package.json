@@ -9,15 +9,19 @@
     "dev": "tsx src/index.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.80.0",
+    "@modelcontextprotocol/sdk": "^1.27.1",
     "@traceweaver/types": "*",
+    "chokidar": "^5.0.0",
+    "fastify": "^5.8.4",
     "js-yaml": "^4.1.0",
     "uuid": "^9.0.0"
   },
   "devDependencies": {
-    "typescript": "*",
-    "vitest": "*",
-    "tsx": "^4.0.0",
     "@types/js-yaml": "^4.0.9",
-    "@types/uuid": "^9.0.0"
+    "@types/uuid": "^9.0.0",
+    "tsx": "^4.0.0",
+    "typescript": "*",
+    "vitest": "*"
   }
 }

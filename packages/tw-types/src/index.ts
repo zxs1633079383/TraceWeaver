@@ -218,3 +218,42 @@ export interface SpanEvent {
   ts: string
   attributes?: Record<string, unknown>
 }
+
+// ─── Notify ────────────────────────────────────────────────────────────────
+
+export interface InboxItem {
+  id: string
+  ts: string
+  event_type: TwEventType
+  entity_id?: string
+  message: string
+  acked: boolean
+}
+
+export interface WebhookEndpoint {
+  name: string
+  url: string
+  headers?: Record<string, string>
+  events: Array<{ event: TwEventType | '*'; entity_type?: EntityType; state?: EntityState }>
+}
+
+export interface NotifyDeliveryConfig {
+  retry_count: number
+  retry_backoff_ms: number
+  timeout_ms: number
+  dead_letter: 'inbox' | 'discard'
+}
+
+export type ConstraintCheckStatus = 'pass' | 'fail' | 'skipped'
+
+export interface ConstraintCheckResult {
+  ref: string
+  result: ConstraintCheckStatus
+  note: string
+}
+
+export interface ConstraintValidationResult {
+  result: ConstraintCheckStatus
+  checked_at: string
+  refs_checked: ConstraintCheckResult[]
+}
