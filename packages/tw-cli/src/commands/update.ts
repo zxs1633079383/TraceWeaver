@@ -25,7 +25,9 @@ export function updateCommand(program: Command): void {
       } else if (opts.attr?.length) {
         const attributes: Record<string, string> = {}
         for (const kv of opts.attr as string[]) {
-          const [k, v] = kv.split('=')
+          const eqIdx = kv.indexOf('=')
+          const k = kv.slice(0, eqIdx)
+          const v = kv.slice(eqIdx + 1)
           attributes[k] = v
         }
         const res = await client.send({ method: 'update_attributes', params: { id, attributes } })

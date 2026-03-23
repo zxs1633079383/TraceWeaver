@@ -6,13 +6,23 @@ export function daemonCommand(program: Command): void {
   const cmd = program.command('daemon').description('Manage the TraceWeaver daemon')
 
   cmd.command('start').action(async () => {
-    await ensureDaemonRunning()
-    console.log('Daemon running.')
+    try {
+      await ensureDaemonRunning()
+      console.log('Daemon running.')
+    } catch (e: any) {
+      console.error(e.message ?? String(e))
+      process.exit(1)
+    }
   })
 
   cmd.command('stop').action(async () => {
-    await stopDaemon()
-    console.log('Daemon stopped.')
+    try {
+      await stopDaemon()
+      console.log('Daemon stopped.')
+    } catch (e: any) {
+      console.error(e.message ?? String(e))
+      process.exit(1)
+    }
   })
 
   cmd.command('status').action(async () => {
