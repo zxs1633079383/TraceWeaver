@@ -31,6 +31,7 @@ export class EntityRegistry {
   }
 
   updateState(id: string, to: EntityState, _reason?: string): Entity {
+    // _reason reserved for WAL audit log in Phase 2
     const entity = this.entities.get(id)
     if (!entity) throw new RegistryError('ENTITY_NOT_FOUND', `Entity ${id} not found`)
     const newState = assertTransition(entity.state, to)
@@ -52,6 +53,9 @@ export class EntityRegistry {
   }
 
   remove(id: string): void {
+    if (!this.entities.has(id)) {
+      throw new RegistryError('ENTITY_NOT_FOUND', `Entity ${id} not found`)
+    }
     this.entities.delete(id)
   }
 

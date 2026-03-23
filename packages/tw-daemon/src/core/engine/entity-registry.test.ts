@@ -59,6 +59,10 @@ describe('updateAttributes', () => {
     const updated = registry.updateAttributes('UC-001', { b: 2 })
     expect(updated.attributes).toEqual({ a: 1, b: 2 })
   })
+
+  it('throws when entity not found', () => {
+    expect(() => registry.updateAttributes('MISSING', { a: 1 })).toThrow('ENTITY_NOT_FOUND')
+  })
 })
 
 describe('remove', () => {
@@ -66,6 +70,10 @@ describe('remove', () => {
     registry.register({ entity_type: 'usecase', id: 'UC-001' })
     registry.remove('UC-001')
     expect(registry.get('UC-001')).toBeUndefined()
+  })
+
+  it('throws when entity not found', () => {
+    expect(() => registry.remove('MISSING')).toThrow('ENTITY_NOT_FOUND')
   })
 })
 
