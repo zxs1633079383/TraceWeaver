@@ -125,16 +125,25 @@ export class IpcServer {
       } else if (method === 'get_metrics') {
         data = this.spanMetrics?.getSummary() ?? { error: 'SpanMetrics not available' }
       } else if (method === 'resolve_impact') {
+        if (typeof (params as any).artifact_path !== 'string') {
+          throw Object.assign(new Error('Missing required param: artifact_path'), { code: 'INVALID_PARAMS' })
+        }
         const { artifact_path, section } = params as { artifact_path: string; section?: string }
         data = this.handler.resolveImpact(artifact_path, section)
       } else if (method === 'harness_list') {
         data = this.harnessLoader?.list() ?? []
       } else if (method === 'harness_show') {
+        if (typeof (params as any).id !== 'string') {
+          throw Object.assign(new Error('Missing required param: id'), { code: 'INVALID_PARAMS' })
+        }
         const { id } = params as { id: string }
         const entry = this.harnessLoader?.get(id)
         if (!entry) throw Object.assign(new Error(`Harness '${id}' not found`), { code: 'NOT_FOUND' })
         data = entry
       } else if (method === 'harness_run') {
+        if (typeof (params as any).entity_id !== 'string' || typeof (params as any).harness_id !== 'string') {
+          throw Object.assign(new Error('Missing required params: entity_id, harness_id'), { code: 'INVALID_PARAMS' })
+        }
         const { entity_id, harness_id } = params as { entity_id: string; harness_id: string }
         if (!this.harnessLoader || !this.triggerExecutor) {
           throw Object.assign(new Error('Harness not available'), { code: 'NOT_AVAILABLE' })
