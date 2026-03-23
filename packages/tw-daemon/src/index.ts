@@ -8,6 +8,11 @@ import { SpanManager } from './otel/span-manager.js'
 import { NotifyEngine } from './notify/engine.js'
 import { InboxAdapter } from './notify/inbox.js'
 import { FsWatcher } from './watcher/fs-watcher.js'
+import { EventLog } from './log/event-log.js'
+import { SpanMetrics } from './metrics/span-metrics.js'
+import { HarnessLoader } from './harness/loader.js'
+import { TriggerExecutor } from './trigger/executor.js'
+import { ConstraintEvaluator } from './constraint/evaluator.js'
 
 const STORE_DIR   = process.env.TW_STORE ?? join(process.cwd(), '.traceweaver')
 const SOCKET_PATH = process.env.TW_SOCKET ?? join(STORE_DIR, 'tw.sock')
@@ -18,10 +23,15 @@ let lastActivity = Date.now()
 
 async function main() {
   const eventBus = new EventBus()
-  const spanManager = new SpanManager({ projectId: 'default' })
   eventBus.start()
 
-  const handler = new CommandHandler({ storeDir: STORE_DIR, eventBus, spanManager })
+  const eventLog = new EventLog(join(STORE_DIR, 'events.ndjson'))
+  eventLog.load()
+
+  const spanManager = new SpanManager({ projectId: 'default' })
+  const spanMetrics = new SpanMetrics(spanManager)
+
+  const handler = new CommandHandler({ storeDir: STORE_DIR, eventBus, spanManager, eventLog })
   await handler.init()
 
   const inbox = new InboxAdapter(join(STORE_DIR, 'inbox'))
@@ -36,6 +46,16 @@ async function main() {
 
   const fsWatcher = new FsWatcher(STORE_DIR, eventBus)
   await fsWatcher.start()
+
+  const harnessLoader = new HarnessLoader(join(STORE_DIR, 'harness'))
+  await harnessLoader.scan()
+
+  const evaluator = new ConstraintEvaluator({
+    enabled: !!process.env.ANTHROPIC_API_KEY,
+    apiKey: process.env.ANTHROPIC_API_KEY,
+  })
+  const triggerExecutor = new TriggerExecutor({ handler, evaluator, harness: harnessLoader, eventBus, inbox })
+  triggerExecutor.start()
 
   // Conditional MCP startup (when spawned by MCP client with TW_MCP_STDIO=1)
   if (process.env.TW_MCP_STDIO) {
@@ -55,7 +75,13 @@ async function main() {
     console.error(`[tw-daemon] HTTP API listening on port ${port}`)
   }
 
-  const server = new IpcServer(SOCKET_PATH, handler, () => { lastActivity = Date.now() }, { inbox })
+  const server = new IpcServer(SOCKET_PATH, handler, () => { lastActivity = Date.now() }, {
+    inbox,
+    eventLog,
+    spanMetrics,
+    harnessLoader,
+    triggerExecutor,
+  })
   await server.start()
 
   await writeFile(PID_FILE, String(process.pid), 'utf8')
@@ -76,6 +102,7 @@ async function main() {
 
   async function cleanup(s: IpcServer, eb: EventBus) {
     clearInterval(watchdog)
+    triggerExecutor.stop()
     notifyEngine.stop()
     await fsWatcher.stop()
     eb.stop()

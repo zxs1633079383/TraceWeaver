@@ -4,14 +4,26 @@ import { rm } from 'node:fs/promises'
 import type { TwRequest, TwResponse } from '@traceweaver/types'
 import type { CommandHandler } from './core/command-handler.js'
 import type { InboxAdapter } from './notify/inbox.js'
+import type { EventLog } from './log/event-log.js'
+import type { SpanMetrics } from './metrics/span-metrics.js'
+import type { HarnessLoader } from './harness/loader.js'
+import type { TriggerExecutor } from './trigger/executor.js'
 
 export interface IpcServerOptions {
   inbox?: InboxAdapter
+  eventLog?: EventLog
+  spanMetrics?: SpanMetrics
+  harnessLoader?: HarnessLoader
+  triggerExecutor?: TriggerExecutor
 }
 
 export class IpcServer {
   private server: Server | null = null
   private readonly inbox?: InboxAdapter
+  private readonly eventLog?: EventLog
+  private readonly spanMetrics?: SpanMetrics
+  private readonly harnessLoader?: HarnessLoader
+  private readonly triggerExecutor?: TriggerExecutor
 
   constructor(
     private readonly socketPath: string,
@@ -20,6 +32,10 @@ export class IpcServer {
     opts?: IpcServerOptions,
   ) {
     this.inbox = opts?.inbox
+    this.eventLog = opts?.eventLog
+    this.spanMetrics = opts?.spanMetrics
+    this.harnessLoader = opts?.harnessLoader
+    this.triggerExecutor = opts?.triggerExecutor
   }
 
   async start(): Promise<void> {
@@ -104,8 +120,30 @@ export class IpcServer {
         data = result.data ?? result
       } else if (method === 'get_dag') {
         data = this.handler.getDagSnapshot()
+      } else if (method === 'log_query') {
+        data = this.eventLog?.query(params as any) ?? []
+      } else if (method === 'get_metrics') {
+        data = this.spanMetrics?.getSummary() ?? { error: 'SpanMetrics not available' }
       } else if (method === 'resolve_impact') {
-        data = { affected: [] }
+        const { artifact_path, section } = params as { artifact_path: string; section?: string }
+        data = this.handler.resolveImpact(artifact_path, section)
+      } else if (method === 'harness_list') {
+        data = this.harnessLoader?.list() ?? []
+      } else if (method === 'harness_show') {
+        const { id } = params as { id: string }
+        const entry = this.harnessLoader?.get(id)
+        if (!entry) throw Object.assign(new Error(`Harness '${id}' not found`), { code: 'NOT_FOUND' })
+        data = entry
+      } else if (method === 'harness_run') {
+        const { entity_id, harness_id } = params as { entity_id: string; harness_id: string }
+        if (!this.harnessLoader || !this.triggerExecutor) {
+          throw Object.assign(new Error('Harness not available'), { code: 'NOT_AVAILABLE' })
+        }
+        const entry = this.harnessLoader.get(harness_id)
+        if (!entry) throw Object.assign(new Error(`Harness '${harness_id}' not found`), { code: 'NOT_FOUND' })
+        const entityResult = await this.handler.get({ id: entity_id })
+        if (!entityResult.ok) throw Object.assign(new Error(entityResult.error.message), { code: entityResult.error.code })
+        data = await this.triggerExecutor.runHarness(entityResult.data, entry)
       } else {
         throw Object.assign(new Error(`Unknown method: ${method}`), { code: 'UNKNOWN_METHOD' })
       }
