@@ -5,6 +5,10 @@ import { updateCommand }   from './commands/update.js'
 import { statusCommand }   from './commands/status.js'
 import { daemonCommand }   from './commands/daemon.js'
 import { syncCommand }     from './commands/sync.js'
+import { inboxCommand }    from './commands/inbox.js'
+import { eventsCommand }   from './commands/events.js'
+import { dagCommand }      from './commands/dag.js'
+import { impactCommand }   from './commands/impact.js'
 
 const program = new Command()
 program
@@ -17,5 +21,9 @@ updateCommand(program)
 statusCommand(program)
 daemonCommand(program)
 syncCommand(program)
+program.addCommand(inboxCommand())
+program.addCommand(eventsCommand())
+program.addCommand(dagCommand())
+program.addCommand(impactCommand())
 
 program.parseAsync(process.argv).catch(e => { console.error(e); process.exit(1) })

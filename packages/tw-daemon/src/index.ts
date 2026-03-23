@@ -5,6 +5,9 @@ import { IpcServer } from './ipc-server.js'
 import { CommandHandler } from './core/command-handler.js'
 import { EventBus } from './core/event-bus/event-bus.js'
 import { SpanManager } from './otel/span-manager.js'
+import { NotifyEngine } from './notify/engine.js'
+import { InboxAdapter } from './notify/inbox.js'
+import { FsWatcher } from './watcher/fs-watcher.js'
 
 const STORE_DIR   = process.env.TW_STORE ?? join(process.cwd(), '.traceweaver')
 const SOCKET_PATH = process.env.TW_SOCKET ?? join(STORE_DIR, 'tw.sock')
@@ -20,6 +23,19 @@ async function main() {
 
   const handler = new CommandHandler({ storeDir: STORE_DIR, eventBus, spanManager })
   await handler.init()
+
+  const inbox = new InboxAdapter(join(STORE_DIR, 'inbox'))
+  const notifyEngine = new NotifyEngine(eventBus, {
+    inbox,
+    rules: [
+      { event: 'entity.state_changed', state: 'rejected' },
+      { event: 'entity.state_changed', state: 'completed' },
+    ],
+  })
+  notifyEngine.start()
+
+  const fsWatcher = new FsWatcher(STORE_DIR, eventBus)
+  await fsWatcher.start()
 
   // Conditional MCP startup (when spawned by MCP client with TW_MCP_STDIO=1)
   if (process.env.TW_MCP_STDIO) {
@@ -39,7 +55,7 @@ async function main() {
     console.error(`[tw-daemon] HTTP API listening on port ${port}`)
   }
 
-  const server = new IpcServer(SOCKET_PATH, handler, () => { lastActivity = Date.now() })
+  const server = new IpcServer(SOCKET_PATH, handler, () => { lastActivity = Date.now() }, { inbox })
   await server.start()
 
   await writeFile(PID_FILE, String(process.pid), 'utf8')
@@ -60,6 +76,8 @@ async function main() {
 
   async function cleanup(s: IpcServer, eb: EventBus) {
     clearInterval(watchdog)
+    notifyEngine.stop()
+    await fsWatcher.stop()
     eb.stop()
     await s.stop()
     try { await rm(PID_FILE) } catch {}

@@ -3,15 +3,24 @@ import { createServer, type Server, type Socket } from 'node:net'
 import { rm } from 'node:fs/promises'
 import type { TwRequest, TwResponse } from '@traceweaver/types'
 import type { CommandHandler } from './core/command-handler.js'
+import type { InboxAdapter } from './notify/inbox.js'
+
+export interface IpcServerOptions {
+  inbox?: InboxAdapter
+}
 
 export class IpcServer {
   private server: Server | null = null
+  private readonly inbox?: InboxAdapter
 
   constructor(
     private readonly socketPath: string,
     private readonly handler: CommandHandler,
     private readonly onActivity?: () => void,
-  ) {}
+    opts?: IpcServerOptions,
+  ) {
+    this.inbox = opts?.inbox
+  }
 
   async start(): Promise<void> {
     // Remove stale socket file if present
@@ -76,6 +85,27 @@ export class IpcServer {
         data = { id: params.id }
       } else if (method === 'get_status') {
         data = await this.handler.getStatus(params as any)
+      } else if (method === 'inbox_list') {
+        if (!this.inbox) {
+          throw Object.assign(new Error('Inbox not available'), { code: 'NOT_AVAILABLE' })
+        }
+        data = await this.inbox.list({ unackedOnly: !!(params as any).unackedOnly })
+      } else if (method === 'inbox_ack') {
+        if (!this.inbox) {
+          throw Object.assign(new Error('Inbox not available'), { code: 'NOT_AVAILABLE' })
+        }
+        if (typeof (params as any).id !== 'string') {
+          throw Object.assign(new Error('Missing required param: id'), { code: 'INVALID_PARAMS' })
+        }
+        await this.inbox.ack((params as any).id)
+        data = { id: (params as any).id }
+      } else if (method === 'query_events') {
+        const result = await this.handler.queryEvents(params as any)
+        data = result.data ?? result
+      } else if (method === 'get_dag') {
+        data = this.handler.getDagSnapshot()
+      } else if (method === 'resolve_impact') {
+        data = { affected: [] }
       } else {
         throw Object.assign(new Error(`Unknown method: ${method}`), { code: 'UNKNOWN_METHOD' })
       }
