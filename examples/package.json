@@ -1,0 +1,27 @@
+{
+  "name": "@traceweaver/examples",
+  "version": "0.1.0",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "run:01": "tsx src/01-basic-entity-lifecycle.ts",
+    "run:02": "tsx src/02-basic-events.ts",
+    "run:03": "tsx src/03-basic-dag-dependencies.ts",
+    "run:04": "tsx src/04-full-flow-research-project.ts",
+    "run:05": "tsx src/05-full-flow-notify-engine.ts",
+    "run:06": "tsx src/06-full-flow-constraint-validation.ts",
+    "run:07": "tsx src/07-edge-invalid-transitions.ts",
+    "run:08": "tsx src/08-edge-propagation-bubble-up.ts",
+    "run:09": "tsx src/09-edge-ring-buffer-overflow.ts",
+    "run:10": "tsx src/10-edge-wal-recovery.ts",
+    "run:all": "tsx src/01-basic-entity-lifecycle.ts && tsx src/02-basic-events.ts && tsx src/03-basic-dag-dependencies.ts && tsx src/04-full-flow-research-project.ts && tsx src/05-full-flow-notify-engine.ts && tsx src/06-full-flow-constraint-validation.ts && tsx src/07-edge-invalid-transitions.ts && tsx src/08-edge-propagation-bubble-up.ts && tsx src/09-edge-ring-buffer-overflow.ts && tsx src/10-edge-wal-recovery.ts"
+  },
+  "dependencies": {
+    "@traceweaver/types": "*",
+    "@traceweaver/daemon": "*"
+  },
+  "devDependencies": {
+    "tsx": "^4.0.0",
+    "typescript": "*"
+  }
+}

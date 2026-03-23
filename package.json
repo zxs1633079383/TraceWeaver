@@ -1,12 +1,22 @@
 {
   "name": "traceweaver",
   "private": true,
-  "workspaces": ["packages/*"],
+  "workspaces": ["packages/*", "examples"],
   "scripts": {
     "build": "npm run build --workspaces",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc --noEmit --project tsconfig.base.json"
+    "typecheck": "tsc --noEmit --project tsconfig.base.json",
+    "example:01": "tsx examples/src/01-basic-entity-lifecycle.ts",
+    "example:02": "tsx examples/src/02-basic-events.ts",
+    "example:03": "tsx examples/src/03-basic-dag-dependencies.ts",
+    "example:04": "tsx examples/src/04-full-flow-research-project.ts",
+    "example:05": "tsx examples/src/05-full-flow-notify-engine.ts",
+    "example:06": "tsx examples/src/06-full-flow-constraint-validation.ts",
+    "example:07": "tsx examples/src/07-edge-invalid-transitions.ts",
+    "example:08": "tsx examples/src/08-edge-propagation-bubble-up.ts",
+    "example:09": "tsx examples/src/09-edge-ring-buffer-overflow.ts",
+    "example:10": "tsx examples/src/10-edge-wal-recovery.ts"
   },
   "devDependencies": {
     "typescript": "^5.4.0",
