@@ -13,6 +13,20 @@ describe('addNode / addEdge', () => {
     dag.addEdge('B', 'A') // B depends on A
     expect(dag.getDependencies('B')).toContain('A')
   })
+
+  it('addNode is idempotent — does not clobber existing edges', () => {
+    dag.addNode('A')
+    dag.addNode('B')
+    dag.addEdge('B', 'A')
+    dag.addNode('B') // re-add should not reset edges
+    expect(dag.getDependencies('B')).toContain('A')
+  })
+})
+
+describe('getDependencies on unknown node', () => {
+  it('returns empty array for unknown node', () => {
+    expect(dag.getDependencies('UNKNOWN')).toEqual([])
+  })
 })
 
 describe('getDependents', () => {
@@ -32,7 +46,7 @@ describe('isReady', () => {
     dag.addNode('A')
     dag.addNode('B')
     dag.addEdge('B', 'A')
-    expect(dag.isReady('B', states as Map<string, string>)).toBe(true)
+    expect(dag.isReady('B', states)).toBe(true)
   })
 
   it('returns false when a dependency is not completed', () => {
@@ -40,7 +54,7 @@ describe('isReady', () => {
     dag.addNode('A')
     dag.addNode('B')
     dag.addEdge('B', 'A')
-    expect(dag.isReady('B', states as Map<string, string>)).toBe(false)
+    expect(dag.isReady('B', states)).toBe(false)
   })
 })
 
