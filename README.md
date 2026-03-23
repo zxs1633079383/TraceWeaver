@@ -16,6 +16,10 @@ TraceWeaver tracks the full lifecycle of R&D entities — experiments, hypothese
 - **Filesystem Watcher** — Automatically emits events when tracked artifact files change on disk
 - **Dependency DAG** — Declare `depends_on` relationships and query the live entity graph
 - **Impact Analysis** — Resolve which entities are affected when an artifact or document section changes
+- **Persistent Event Log** — NDJSON-backed event log survives daemon restarts; full query API by entity, type, and time range
+- **Span Metrics** — Derive cycle time, failure rate, and throughput directly from OTel span history
+- **Harness Engineering** — Constraint files as code (`.traceweaver/harness/*.md`); auto-validate entities on state changes, auto-reject on failure
+- **Autonomous Agent Loop** — AI agents can observe → detect → diagnose → validate → fix in a complete closed loop via CLI or MCP
 
 ---
 
@@ -33,11 +37,16 @@ TraceWeaver tracks the full lifecycle of R&D entities — experiments, hypothese
      |          +---> EntityRegistry + DAG
      |          +---> WAL + FsStore
      |          +---> EventBus
+     |          +---> ImpactResolver     (file → entity reverse index + DAG propagation)
      |                    |
+     |                    +---> EventLog         (NDJSON persistent log)
      |                    +---> NotifyEngine --> InboxAdapter
      |                    |                 --> WebhookAdapter
      |                    +---> FsWatcher
-     |                    +---> SpanManager (OTel)
+     |                    +---> SpanManager (OTel) --> SpanMetrics
+     |                    +---> HarnessLoader   (.traceweaver/harness/*.md)
+     |                    +---> TriggerExecutor (auto-validate → auto-reject)
+     |                              └─> ConstraintEvaluator (LLM-backed)
      |
      +---> McpServer  (stdio, optional)
      +---> HttpServer (port, optional)
@@ -75,14 +84,30 @@ tw status
 # View notification inbox
 tw inbox
 
-# Query recent event history
-tw events --limit 20
+# Query recent event history (persistent log, survives restarts)
+tw log query --since 1h --entity exp-001 --type state_changed
+
+# Stream live events
+tw watch
+
+# View span-derived metrics
+tw metrics --type task --window 24
 
 # Inspect the dependency graph
 tw dag
 
 # Analyze impact of a document change
-tw impact ./docs/prd.md#requirements-section
+tw impact ./docs/prd.md
+
+# Harness engineering — constraint files as code
+tw harness list
+tw harness show test-coverage
+tw harness run exp-001 --harness-id test-coverage
+
+# All commands support --json for machine-readable output
+tw status --json
+tw metrics --json
+tw harness list --json
 ```
 
 ---
@@ -126,6 +151,7 @@ Environment variable overrides:
 | `TW_INBOUND_TOKEN` | Bearer token for HTTP API auth |
 | `TW_MCP_STDIO` | Set to `1` to enable MCP stdio transport |
 | `TW_WEBHOOK_TOKEN` | Token sent in webhook `Authorization` header |
+| `ANTHROPIC_API_KEY` | Enables LLM-backed harness constraint evaluation |
 
 ---
 
@@ -170,6 +196,72 @@ GET    /dag                   Get dependency graph
 ```
 
 All requests require `Authorization: Bearer <TW_INBOUND_TOKEN>` when `TW_INBOUND_TOKEN` is set.
+
+---
+
+## Harness Engineering
+
+Harnesses are constraint files that live alongside your project as Markdown with YAML frontmatter. They define what "done" means for each entity type, and the daemon enforces them automatically.
+
+### Harness file format
+
+Create `.traceweaver/harness/<id>.md`:
+
+```markdown
+---
+id: test-coverage
+applies_to:
+  - task
+trigger_on:
+  - review
+  - completed
+---
+# Test Coverage Constraint
+
+All tasks MUST include test files. Check that artifact_refs contains at least
+one entry with type "test".
+
+RESULT: pass if tests are present, fail otherwise.
+```
+
+### Auto-enforcement
+
+When an entity reaches a state listed in `trigger_on`, the TriggerExecutor automatically:
+1. Evaluates the harness constraint via the ConstraintEvaluator (LLM-backed when `ANTHROPIC_API_KEY` is set)
+2. On **fail** → automatically transitions the entity to `rejected` and writes an inbox notification
+3. On **pass** → records the result; the entity continues its lifecycle
+
+Enable AI-backed evaluation:
+
+```bash
+export ANTHROPIC_API_KEY=sk-...
+```
+
+Without the key, the evaluator runs in disabled mode (no auto-reject).
+
+### Environment variable
+
+| Variable | Description |
+|---|---|
+| `ANTHROPIC_API_KEY` | Enables LLM-backed constraint evaluation in TriggerExecutor |
+
+---
+
+## Autonomous Agent Loop
+
+Phase 5 completes the full observe → detect → diagnose → validate → fix loop:
+
+```
+AI Agent
+  │
+  ├── tw log query --since 1h          # observe: what happened?
+  ├── tw metrics --type task           # detect: are there failures?
+  ├── tw impact src/auth.ts            # diagnose: what is affected?
+  ├── tw harness run <id> --harness-id # validate: does it pass constraints?
+  └── tw update <id> --state completed # fix: advance when ready
+```
+
+All commands emit `--json` for programmatic use. The MCP server exposes the same operations as tools (`tw_query_log`, `tw_get_metrics`, `tw_resolve_impact`, `tw_harness_run`).
 
 ---
 
