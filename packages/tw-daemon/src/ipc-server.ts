@@ -1,0 +1,78 @@
+// packages/tw-daemon/src/ipc-server.ts
+import { createServer, type Server, type Socket } from 'node:net'
+import { rm } from 'node:fs/promises'
+import type { TwRequest, TwResponse } from '@traceweaver/types'
+import type { CommandHandler } from './core/command-handler.js'
+
+export class IpcServer {
+  private server: Server | null = null
+
+  constructor(
+    private readonly socketPath: string,
+    private readonly handler: CommandHandler,
+  ) {}
+
+  async start(): Promise<void> {
+    // Remove stale socket file if present
+    try { await rm(this.socketPath) } catch {}
+    await new Promise<void>((resolve) => {
+      this.server = createServer(socket => this.handleConnection(socket))
+      this.server.listen(this.socketPath, resolve)
+    })
+  }
+
+  async stop(): Promise<void> {
+    await new Promise<void>((resolve) => {
+      this.server?.close(() => resolve())
+    })
+    try { await rm(this.socketPath) } catch {}
+  }
+
+  private handleConnection(socket: Socket): void {
+    let buf = ''
+    socket.on('data', async (chunk) => {
+      buf += chunk.toString()
+      const lines = buf.split('\n')
+      buf = lines.pop() ?? ''
+      for (const line of lines) {
+        if (!line.trim()) continue
+        try {
+          const req = JSON.parse(line) as TwRequest
+          const res = await this.dispatch(req)
+          socket.write(JSON.stringify(res) + '\n')
+        } catch (e) {
+          socket.write(JSON.stringify({
+            request_id: 'unknown',
+            ok: false,
+            error: { code: 'PARSE_ERROR', message: String(e) },
+          }) + '\n')
+        }
+      }
+    })
+    socket.on('error', () => socket.destroy())
+  }
+
+  private async dispatch(req: TwRequest): Promise<TwResponse> {
+    const { request_id, method, params } = req
+    try {
+      let data: unknown
+      if (method === 'register') {
+        data = await this.handler.register(params as any)
+      } else if (method === 'update_state') {
+        data = await this.handler.updateState(params as any)
+      } else if (method === 'update_attributes') {
+        data = await this.handler.updateAttributes(params as any)
+      } else if (method === 'remove') {
+        await this.handler.remove(params.id as string)
+        data = { id: params.id }
+      } else if (method === 'get_status') {
+        data = await this.handler.getStatus(params as any)
+      } else {
+        throw Object.assign(new Error(`Unknown method: ${method}`), { code: 'UNKNOWN_METHOD' })
+      }
+      return { request_id, ok: true, data }
+    } catch (e: any) {
+      return { request_id, ok: false, error: { code: e.code ?? 'ERROR', message: e.message } }
+    }
+  }
+}
