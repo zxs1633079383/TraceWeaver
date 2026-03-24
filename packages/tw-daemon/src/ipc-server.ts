@@ -172,6 +172,27 @@ export class IpcServer {
         if (!this.harnessValidator) throw Object.assign(new Error('HarnessValidator not available'), { code: 'NOT_AVAILABLE' })
         const entities = this.handler.getAllEntities()
         data = this.harnessValidator.validate(entities)
+      } else if (method === 'emit_event') {
+        if (typeof (params as any).entity_id !== 'string') {
+          throw Object.assign(new Error('Missing required param: entity_id'), { code: 'INVALID_PARAMS' })
+        }
+        data = await this.handler.emitEvent(params as any)
+      } else if (method === 'cascade_update') {
+        if (typeof (params as any).id !== 'string') {
+          throw Object.assign(new Error('Missing required param: id'), { code: 'INVALID_PARAMS' })
+        }
+        const { id, attributes, cascade } = params as { id: string; attributes: Record<string, unknown>; cascade: boolean }
+        const result = await this.handler.cascadeUpdate({ id, attributes: attributes ?? {}, cascade: cascade ?? false })
+        if (!result.ok) throw Object.assign(new Error(result.error!.message), { code: result.error!.code })
+        data = result.data
+      } else if (method === 'remediation_next') {
+        const remDir = (params as any).queue_dir as string | undefined
+        if (!remDir) throw Object.assign(new Error('Missing required param: queue_dir'), { code: 'INVALID_PARAMS' })
+        data = await this.handler.remediationNext(remDir)
+      } else if (method === 'remediation_done') {
+        const { rem_id, queue_dir } = params as { rem_id: string; queue_dir: string }
+        if (!rem_id || !queue_dir) throw Object.assign(new Error('Missing required params: rem_id, queue_dir'), { code: 'INVALID_PARAMS' })
+        data = await this.handler.remediationDone({ remId: rem_id, queueDir: queue_dir })
       } else {
         throw Object.assign(new Error(`Unknown method: ${method}`), { code: 'UNKNOWN_METHOD' })
       }

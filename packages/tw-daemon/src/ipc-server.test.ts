@@ -169,4 +169,50 @@ describe('IpcServer', () => {
     expect(res.data[0].type).toBe('orphaned_ref')
     expect(res.data[0].harness_id).toBe('missing-harness')
   })
+
+  it('emit_event adds span event and returns ok', async () => {
+    const { socketPath } = await startServer()
+    await sendRequest(socketPath, {
+      request_id: 'ee-reg',
+      method: 'register',
+      params: { id: 'task-e1', entity_type: 'task' },
+    })
+    const res = await sendRequest(socketPath, {
+      request_id: 'ee1',
+      method: 'emit_event',
+      params: { entity_id: 'task-e1', event: 'custom.hook', attributes: { source: 'test' } },
+    })
+    expect(res.ok).toBe(true)
+  })
+
+  it('cascade_update calls handler.cascadeUpdate and returns updated_count', async () => {
+    const { socketPath } = await startServer()
+    await sendRequest(socketPath, {
+      request_id: 'cu-reg1',
+      method: 'register',
+      params: { id: 'uc-1', entity_type: 'usecase' },
+    })
+    await sendRequest(socketPath, {
+      request_id: 'cu-reg2',
+      method: 'register',
+      params: { id: 'plan-1', entity_type: 'plan', depends_on: ['uc-1'] },
+    })
+    const res = await sendRequest(socketPath, {
+      request_id: 'cu1',
+      method: 'cascade_update',
+      params: { id: 'uc-1', attributes: { description: 'v2' }, cascade: true },
+    })
+    expect(res.ok).toBe(true)
+    expect((res as any).data.updated_count).toBeGreaterThanOrEqual(1)
+  })
+
+  it('cascade_update with unknown id returns error', async () => {
+    const { socketPath } = await startServer()
+    const res = await sendRequest(socketPath, {
+      request_id: 'cu-bad',
+      method: 'cascade_update',
+      params: { id: 'nope', attributes: {}, cascade: true },
+    })
+    expect(res.ok).toBe(false)
+  })
 })
