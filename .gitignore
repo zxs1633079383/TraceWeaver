@@ -4,3 +4,18 @@ dist/
 .DS_Store
 *.log
 .env
+
+# IDE
+.idea/
+
+# Daemon runtime data (socket, pid, WAL, event log, entity store)
+.traceweaver/
+
+# Stale compiled output that landed in src/ before outDir was fixed
+packages/*/src/**/*.js
+packages/*/src/**/*.js.map
+packages/*/src/**/*.d.ts
+packages/*/src/**/*.d.ts.map
+
+# lockfile (managed separately)
+package-lock.json
