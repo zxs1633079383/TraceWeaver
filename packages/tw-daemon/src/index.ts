@@ -13,15 +13,21 @@ import { SpanMetrics } from './metrics/span-metrics.js'
 import { HarnessLoader } from './harness/loader.js'
 import { TriggerExecutor } from './trigger/executor.js'
 import { ConstraintEvaluator } from './constraint/evaluator.js'
+import { loadConfig, resolveWatchDirs } from './config/loader.js'
+import type { NotifyRule } from './notify/engine.js'
 
-const STORE_DIR   = process.env.TW_STORE ?? join(process.cwd(), '.traceweaver')
-const SOCKET_PATH = process.env.TW_SOCKET ?? join(STORE_DIR, 'tw.sock')
-const PID_FILE    = join(STORE_DIR, 'daemon.pid')
+const PROJECT_ROOT = process.cwd()
+const STORE_DIR    = process.env.TW_STORE ?? join(PROJECT_ROOT, '.traceweaver')
+const SOCKET_PATH  = process.env.TW_SOCKET ?? join(STORE_DIR, 'tw.sock')
+const PID_FILE     = join(STORE_DIR, 'daemon.pid')
 const IDLE_MS     = 30 * 60 * 1000
 
 let lastActivity = Date.now()
 
 async function main() {
+  // Load project config (.traceweaver/config.yaml) — all fields optional
+  const config = loadConfig(STORE_DIR)
+
   const eventBus = new EventBus()
   eventBus.start()
 
@@ -35,16 +41,23 @@ async function main() {
   await handler.init()
 
   const inbox = new InboxAdapter(join(STORE_DIR, 'inbox'))
+  const defaultRules: NotifyRule[] = [
+    { event: 'entity.state_changed', state: 'rejected' },
+    { event: 'entity.state_changed', state: 'completed' },
+  ]
+  const configRules = config.notify?.rules as NotifyRule[] | undefined
   const notifyEngine = new NotifyEngine(eventBus, {
     inbox,
-    rules: [
-      { event: 'entity.state_changed', state: 'rejected' },
-      { event: 'entity.state_changed', state: 'completed' },
-    ],
+    rules: configRules ?? defaultRules,
   })
   notifyEngine.start()
 
-  const fsWatcher = new FsWatcher(STORE_DIR, eventBus)
+  // Watch project files (NOT the store dir).
+  // Dirs come from config.watch.dirs, defaulting to project root.
+  const watchDirs = resolveWatchDirs(config, PROJECT_ROOT, STORE_DIR)
+  const fsWatcher = new FsWatcher(watchDirs, eventBus, {
+    extraIgnored: config.watch?.ignored,
+  })
   await fsWatcher.start()
 
   const harnessLoader = new HarnessLoader(join(STORE_DIR, 'harness'))

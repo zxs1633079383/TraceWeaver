@@ -2,21 +2,41 @@ import chokidar, { type FSWatcher } from 'chokidar'
 import { randomUUID } from 'node:crypto'
 import type { EventBus } from '../core/event-bus/event-bus.js'
 
+export interface FsWatcherOptions {
+  /** Additional glob/regex patterns to ignore (appended to built-in daemon exclusions). */
+  extraIgnored?: Array<string | RegExp>
+}
+
+// Always exclude daemon-internal file types regardless of watch dirs
+const DAEMON_INTERNAL: RegExp[] = [
+  /\.sock$/,
+  /\.pid$/,
+  /\.wal$/,
+  /\.ndjson$/,
+  /\.json$/,
+]
+
 export class FsWatcher {
   private watcher: FSWatcher | null = null
 
   constructor(
-    private readonly watchDir: string,
-    private readonly bus: EventBus
+    /** One or more directories to watch. Pass project dirs, NOT the store dir. */
+    private readonly watchDirs: string | string[],
+    private readonly bus: EventBus,
+    private readonly opts: FsWatcherOptions = {},
   ) {}
 
   async start(): Promise<void> {
-    this.watcher = chokidar.watch(this.watchDir, {
+    const ignored: Array<string | RegExp> = [
+      ...DAEMON_INTERNAL,
+      ...(this.opts.extraIgnored ?? []),
+    ]
+
+    this.watcher = chokidar.watch(this.watchDirs, {
       ignoreInitial: true,
       persistent: false,
       awaitWriteFinish: { stabilityThreshold: 100, pollInterval: 50 },
-      // Exclude daemon-internal files: socket, pid, WAL, NDJSON log, JSON store
-      ignored: [/\.sock$/, /\.pid$/, /\.wal$/, /\.ndjson$/, /\.json$/],
+      ignored,
     })
 
     this.watcher.on('change', (filePath) => this.emit(filePath, 'changed'))
