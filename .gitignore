@@ -10,6 +10,8 @@ dist/
 
 # Daemon runtime data (socket, pid, WAL, event log, entity store)
 .traceweaver/
+# But track the project config (Jaeger endpoint, watch dirs, notify rules)
+!.traceweaver/config.yaml
 
 # Stale compiled output that landed in src/ before outDir was fixed
 packages/*/src/**/*.js

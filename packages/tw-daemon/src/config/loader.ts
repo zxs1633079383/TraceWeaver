@@ -58,7 +58,10 @@ export interface WatchConfig {
 
 export interface OtelConfig {
   project_id?: string
-  exporter?: 'console' | 'otlp'
+  /** console | otlp-http | otlp-grpc  (default: console) */
+  exporter?: 'console' | 'otlp-http' | 'otlp-grpc'
+  /** host:port without protocol prefix, e.g. "localhost:4317" */
+  endpoint?: string
 }
 
 export interface HttpConfig {

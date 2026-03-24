@@ -1,0 +1,43 @@
+# TraceWeaver 项目配置
+# 文档：packages/tw-daemon/src/config/loader.ts
+
+# ── OTel / Jaeger 导出配置 ────────────────────────────────────────────────────
+#
+# exporter 选项：
+#   console   — 仅输出到 stderr（本地调试）
+#   otlp-http — OTLP/HTTP 协议（端口 4318）
+#   otlp-grpc — OTLP/gRPC 协议（端口 4317，Jaeger 标准接入）
+#
+# endpoint：目标采集器地址（不含协议前缀）
+#
+# K8s 集群内直接访问（在 Pod 中运行 tw daemon 时）：
+otel:
+  exporter: otlp-grpc
+  endpoint: jaeger-cses-pre-collector.jaeger-cses.svc.cluster.local:4317
+  project_id: traceweaver
+
+# 本地开发（需先 port-forward）：
+# kubectl port-forward svc/jaeger-cses-pre-collector 4317:4317 -n jaeger-cses
+#
+# 然后改为：
+# otel:
+#   exporter: otlp-grpc
+#   endpoint: localhost:4317
+#   project_id: traceweaver
+
+# ── 文件监听 ─────────────────────────────────────────────────────────────────
+watch:
+  dirs:
+    - .
+  ignored:
+    - "**/node_modules/**"
+    - "**/dist/**"
+    - "**/.git/**"
+
+# ── 通知规则 ─────────────────────────────────────────────────────────────────
+notify:
+  rules:
+    - event: entity.state_changed
+      state: rejected
+    - event: entity.state_changed
+      state: completed

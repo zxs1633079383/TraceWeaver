@@ -43,8 +43,9 @@ async function main() {
   eventLog.load()
 
   const exporterRegistry = new ExporterRegistry()
-  const exporterType = process.env.TW_OTEL_EXPORTER ?? 'console'
-  const exporterEndpoint = process.env.TW_OTEL_ENDPOINT ?? 'localhost:4317'
+  // Env vars take precedence over config.yaml
+  const exporterType = process.env.TW_OTEL_EXPORTER ?? config.otel?.exporter ?? 'console'
+  const exporterEndpoint = process.env.TW_OTEL_ENDPOINT ?? config.otel?.endpoint ?? 'localhost:4317'
 
   if (exporterType === 'console') {
     exporterRegistry.register(new ConsoleExporter())
@@ -144,6 +145,11 @@ async function main() {
         ts: new Date().toISOString(),
         attributes: { trigger_file: filePath, impact_type: 'direct' },
       })
+      // Record file change as a span event so it appears in Jaeger trace
+      spanManager.addEvent(entity.id, 'artifact.modified', {
+        'tw.file.path': filePath,
+        'tw.impact.type': 'direct',
+      })
     }
     for (const entity of transitively) {
       eventBus.publish({
@@ -153,6 +159,11 @@ async function main() {
         entity_type: entity.entity_type,
         ts: new Date().toISOString(),
         attributes: { trigger_file: filePath, impact_type: 'transitive' },
+      })
+      // Record transitive impact as a span event
+      spanManager.addEvent(entity.id, 'artifact.modified', {
+        'tw.file.path': filePath,
+        'tw.impact.type': 'transitive',
       })
     }
   })
