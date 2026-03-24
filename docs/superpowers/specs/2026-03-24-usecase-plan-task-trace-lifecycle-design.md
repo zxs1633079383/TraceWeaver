@@ -63,24 +63,40 @@ UseCase.registered
 
 ## 3. TraceId 一致性
 
-### 3.1 现有 gap
+### 3.1 现有 gap 与迁移路径
 
-`SpanManager` 当前使用 `projectTraceId`（单例全局共享），导致多 UseCase span 混入同一 trace。
+`SpanManager` 当前使用 `projectTraceId`（构造时生成一次，全局共享），所有 span 公用同一个 trace_id。这与"每个 UseCase 独立 trace"的目标冲突。
 
-### 3.2 新行为
-
-```
-UseCase 注册 → 生成新 trace_id（UseCase 为根 span）
-Plan 注册    → parent_id=<uc-id> → 继承 UseCase trace_id
-Task 注册    → parent_id=<plan-id> → 继承同一 trace_id
-```
-
-`SpanManager.createSpan` 修改逻辑：
+**迁移方式**：移除 `this.projectTraceId` 字段，改为在 `createSpan` 内通过 `deriveTraceId()` 按需生成：
 
 ```ts
-// 有 parent_span_id → 从 parent span 取 trace_id
-// 无 parent_span_id（根实体）→ 生成新 trace_id
-const trace_id = parentSpan ? parentSpan.trace_id : randomUUID().replace(/-/g, '')
+// SpanManager 新增私有方法
+private deriveTraceId(parentSpanId?: string): string {
+  if (parentSpanId) {
+    // 从已有 span 继承 trace_id（确保同一棵树共用一个 trace）
+    for (const span of this.spans.values()) {
+      if (span.span_id === parentSpanId) return span.trace_id
+    }
+  }
+  // 无 parent → 当前实体为根 → 生成新 trace_id
+  return randomUUID().replace(/-/g, '')
+}
+```
+
+`createSpan` 中替换：
+
+```ts
+// 旧：trace_id: this.projectTraceId
+// 新：
+trace_id: this.deriveTraceId(input.parent_span_id),
+```
+
+### 3.2 继承规则
+
+```
+UseCase 注册（无 parent） → 生成新 trace_id T1
+Plan 注册（parent=uc-span） → 继承 T1
+Task 注册（parent=plan-span）→ 继承 T1
 ```
 
 ### 3.3 无 UseCase 的场景（可插拔）
@@ -90,6 +106,8 @@ const trace_id = parentSpan ? parentSpan.trace_id : randomUUID().replace(/-/g, '
 Plan 作为根 → Task 继承 Plan 的 trace_id
 Task 作为根 → 独立 trace
 ```
+
+> **注意**：`projectTraceId` 字段移除后，现有测试中直接引用该字段的断言需同步更新。
 
 ---
 
@@ -134,7 +152,10 @@ tw update-state uc-xxx completed
 tw update uc-xxx --attr description="v2 需求变更" --cascade
 
 # Step 1: entity.updated + addEvent(uc-xxx, "attributes_updated")
-# Step 2: Dag.getDescendants(uc-xxx) → [plan-fe, plan-be, task-fe-1, ...]
+# Step 2: Dag.getTransitiveDependents(uc-xxx) → [plan-fe, plan-be, task-fe-1, ...]
+#   定义：从 uc-xxx 出发，沿反向边（被依赖方向）递归收集所有节点
+#   DAG 边约定：from depends ON to（child→parent），
+#   因此 getTransitiveDependents 收集的是所有依赖链可达 uc-xxx 的节点
 # Step 3: for each 下游实体:
 #   addEvent(entity_id, "upstream_updated", { source: "uc-xxx", changed: ["description"] })
 #   emit entity.upstream_changed
@@ -163,12 +184,24 @@ tw remove uc-xxx
 ### 4.4 新增 IPC 命令
 
 ```
-cascade_update: {
-  id: string
-  attributes: Record<string, unknown>
-  cascade: boolean
+# 请求
+method: "cascade_update"
+params: {
+  id: string                          // 目标实体 id
+  attributes: Record<string, unknown> // 需要更新的属性
+  cascade: boolean                    // false 等价于普通 update_attributes
 }
+
+# 成功响应
+{ ok: true, data: { id, updated_count: number } }
+# updated_count = 1（仅本实体） 或 N（本实体 + 所有下游）
+
+# 错误码
+ENTITY_NOT_FOUND  → id 不存在
+DAG_CYCLE         → 依赖图存在环（理论上不应出现，防御性返回）
 ```
+
+`cascade: false` 时行为与 `update_attributes` 完全相同，无下游通知。
 
 ### 4.5 Jaeger 可视层级
 
@@ -269,12 +302,19 @@ tw taskmaster sync --plan=plan-fe
 ### 6.2 config.yaml 控制
 
 ```yaml
+# 所有字段可选，默认值均为 true（向后兼容现有项目）
 integrations:
   usecase: true        # 关掉 → Task/Plan 自成根 trace
-  plan_fanout: true    # 关掉 → 直接 UseCase → Task
-  taskmaster: true     # 关掉 → 手动 tw register task
-  remediation: true    # 关掉 → rejection 只通知 inbox
+  plan_fanout: true    # 关掉 → 禁止 Plan 级联 cascade_update；UseCase 直连 Task
+  taskmaster: true     # 关掉 → tw taskmaster 命令报错并提示未启用
+  remediation: true    # 关掉 → rejection 只通知 inbox，不自动修复
   harness: true        # 关掉 → 纯 trace，不做约束评估
+
+remediation:
+  enabled: true
+  max_attempts: 3
+  mode: queue                          # queue | inline | notify_only
+  trigger_from_states: []              # 空 = 所有 rejected 均触发；[review] = 仅从 review 拒绝时触发
 ```
 
 ### 6.3 场景覆盖
@@ -293,19 +333,25 @@ integrations:
 
 ### 7.1 触发链路
 
+`error.log` 的出现属于文件变更，通过现有 FsWatcher → ImpactResolver → TriggerExecutor 正常流转，最终仍产生 `entity.state_changed { state: rejected }` 事件。RemediationEngine **统一订阅该事件**，无需单独监听 error.log，避免双重触发竞争。
+
 ```
 TriggerExecutor
-  ↓ entity state → rejected（previous_state: review）
-  ↓ OR FsWatcher 检测到 error.log → artifact.modified → harness fail → rejected
+  ↓ entity state → rejected（任意原因：harness fail / error.log / 手动）
+  ↓ emit entity.state_changed { state: "rejected" }
 
 RemediationEngine（订阅 EventBus）
-  ↓ 过滤 entity.state_changed { state: "rejected", previous_state: "review" }
+  ↓ 过滤 entity.state_changed { state: "rejected" }
+  ↓ 去重检查：dedup_key = entity_id + "|" + event.ts
+     防止同一 rejection 事件被重复入队
   ↓ 读取 FeedbackLog（rejection reason + harness_id + artifact_refs）
-  ↓ 检查 circuit breaker（entity attributes.remediation_attempts）
+  ↓ 检查 circuit breaker（统计 done/ + in-progress/ 中该 entity 的历史 attempt 数）
 
-  attempt ≤ max → 写入 Remediation Queue
+  attempt ≤ max → 写入 pending/ + addEvent("remediation_queued")
   attempt > max → 永久 rejected + inbox 通知人工介入
 ```
+
+可选配置：`remediation.trigger_from_states: [review]`（限定只有从 review 拒绝时才触发自动修复）。
 
 ### 7.2 Remediation Queue 结构
 
@@ -380,7 +426,7 @@ TriggerExecutor re-evaluate
 | 3 | 自动修复（最后机会）|
 | > max | 永久 rejected + inbox 人工介入 + addEvent("remediation_exhausted") |
 
-attempt count 存储在 entity attributes `{ remediation_attempts: N }`。
+**attempt count 存储位置**：从 `.traceweaver/remediation-queue/` 的 `done/` 和 `in-progress/` 目录中统计同一 `entity_id` 的历史条目数量得出，**不存储在 entity attributes**（避免污染实体数据模型和 WAL 日志）。
 
 ### 7.6 可配置模式
 
@@ -480,11 +526,12 @@ error.log 格式约定（写入 CLAUDE.md）：
 |------|------|
 | `src/remediation/remediation-engine.ts` | RemediationEngine 主体 |
 | `src/remediation/remediation-engine.test.ts` | TDD 测试 |
-| `src/core/engine/dag.ts` | 新增 `getDescendants(id)` 方法 |
-| IPC command: `cascade_update` | 级联更新 + 下游 span event |
+| `src/core/engine/dag.ts` | 新增 `getTransitiveDependents(id)` 方法（沿反向边递归） |
+| `src/otel/span-manager.ts` | 移除 `projectTraceId`，新增 `deriveTraceId()` |
+| IPC command: `cascade_update` | 级联更新 + 下游 span event（见 9.3） |
 | IPC command: `remediation_next` | 消费队列 |
 | IPC command: `remediation_done` | 完成修复 + 重新提交 |
-| config.yaml: `integrations` 字段 | 可插拔组件开关 |
+| config.yaml: `integrations` 字段 | 可插拔组件开关（默认全 true） |
 | config.yaml: `remediation` 字段 | 修复循环配置 |
 
 ### 9.2 tw-cli 新增
