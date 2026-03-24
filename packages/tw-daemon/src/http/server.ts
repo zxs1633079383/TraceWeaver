@@ -13,8 +13,8 @@ export interface HttpServerOptions {
 export function buildHttpServer(handler: CommandHandler, opts: HttpServerOptions = {}) {
   const app = Fastify({ logger: false })
 
-  app.setErrorHandler((err, _req, reply) => {
-    const code = (err as any).code ?? 'INTERNAL_ERROR'
+  app.setErrorHandler((err: Error & { code?: string }, _req, reply) => {
+    const code = err.code ?? 'INTERNAL_ERROR'
     reply.status(500).send({ ok: false, error: { code, message: err.message } })
   })
 

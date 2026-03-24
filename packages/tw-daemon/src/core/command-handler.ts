@@ -54,7 +54,7 @@ export class CommandHandler {
     for (const entry of entries) {
       try {
         if (entry.op === 'upsert_entity') {
-          const p = entry.payload as RegisterParams
+          const p = entry.payload as unknown as RegisterParams
           const entity = this.registry.register(p)
           this.dag.addNode(p.id)
           if (p.depends_on?.length) {
@@ -65,11 +65,11 @@ export class CommandHandler {
           }
           this.cache.set(entity)
         } else if (entry.op === 'update_state') {
-          const p = entry.payload as UpdateStateParams
+          const p = entry.payload as unknown as UpdateStateParams
           const entity = this.registry.updateState(p.id, p.state, p.reason)
           this.cache.set(entity)
         } else if (entry.op === 'update_attributes') {
-          const p = entry.payload as UpdateAttributesParams
+          const p = entry.payload as unknown as UpdateAttributesParams
           const entity = this.registry.updateAttributes(p.id, p.attributes)
           this.cache.set(entity)
         } else if (entry.op === 'remove_entity') {

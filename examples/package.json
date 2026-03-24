@@ -4,6 +4,7 @@
   "type": "module",
   "private": true,
   "scripts": {
+    "build": "echo 'examples: no build step'",
     "run:01": "tsx src/01-basic-entity-lifecycle.ts",
     "run:02": "tsx src/02-basic-events.ts",
     "run:03": "tsx src/03-basic-dag-dependencies.ts",
