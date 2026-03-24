@@ -129,6 +129,7 @@ export type TwEventType =
   | 'webhook.inbound'
   | 'git.commit'
   | 'file.changed'
+  | 'entity.upstream_changed'
 
 export interface TwEvent {
   id: string            // uuid
