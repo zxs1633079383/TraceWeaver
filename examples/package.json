@@ -14,7 +14,8 @@
     "run:08": "tsx src/08-edge-propagation-bubble-up.ts",
     "run:09": "tsx src/09-edge-ring-buffer-overflow.ts",
     "run:10": "tsx src/10-edge-wal-recovery.ts",
-    "run:all": "tsx src/01-basic-entity-lifecycle.ts && tsx src/02-basic-events.ts && tsx src/03-basic-dag-dependencies.ts && tsx src/04-full-flow-research-project.ts && tsx src/05-full-flow-notify-engine.ts && tsx src/06-full-flow-constraint-validation.ts && tsx src/07-edge-invalid-transitions.ts && tsx src/08-edge-propagation-bubble-up.ts && tsx src/09-edge-ring-buffer-overflow.ts && tsx src/10-edge-wal-recovery.ts"
+    "run:11": "tsx src/11-full-chain-autonomous-loop.ts",
+    "run:all": "tsx src/01-basic-entity-lifecycle.ts && tsx src/02-basic-events.ts && tsx src/03-basic-dag-dependencies.ts && tsx src/04-full-flow-research-project.ts && tsx src/05-full-flow-notify-engine.ts && tsx src/06-full-flow-constraint-validation.ts && tsx src/07-edge-invalid-transitions.ts && tsx src/08-edge-propagation-bubble-up.ts && tsx src/09-edge-ring-buffer-overflow.ts && tsx src/10-edge-wal-recovery.ts && tsx src/11-full-chain-autonomous-loop.ts"
   },
   "dependencies": {
     "@traceweaver/types": "*",
