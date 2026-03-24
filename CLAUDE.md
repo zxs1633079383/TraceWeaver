@@ -60,6 +60,29 @@ examples  ──▶  可直接 import daemon src（演示用），不走 IPC
 
 ---
 
+## TaskMaster 与 TraceWeaver 联动规范
+
+使用 TaskMaster 时，必须成对调用 tw hook：
+
+```bash
+# expand 前后
+tw taskmaster hook before-expand --plan=<plan-id> --tm-id=<n>
+task-master expand --id=<n>
+tw taskmaster hook after-expand --plan=<plan-id> --tm-id=<n>
+
+# 状态变更后
+task-master set-status <n> <status>
+tw taskmaster hook status-changed --tm-id=<n> --status=<status>
+```
+
+## error.log 格式约定（供 tw diagnose --from-log 使用）
+
+```
+[ERROR] <ISO-ts> entity_id=<id> trace_id=<id> harness=<id> msg="..."
+```
+
+---
+
 ## 提交规范
 
 ```

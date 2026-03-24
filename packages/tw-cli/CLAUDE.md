@@ -108,7 +108,7 @@ tw daemon stop
 | 方法 | 参数 | 说明 |
 |------|------|------|
 | `get_status` | `{}` | 实体汇总 |
-| `register_entity` | RegisterParams | 注册实体 |
+| `register` | RegisterParams | 注册实体 |
 | `update_state` | `{id, state}` | 更新状态 |
 | `update_attributes` | `{id, attributes}` | 更新属性 |
 | `query_events` | `{entity_id?, since?, limit?}` | 查询事件 |
@@ -124,3 +124,7 @@ tw daemon stop
 | `feedback_query` | `{harness_id?, entity_id?, result?, since?, limit?}` | FeedbackLog 查询 |
 | `feedback_summary` | `{harness_id?}` | Harness 评估摘要 |
 | `harness_validate` | `{}` | Harness-Entity 对齐检查 |
+| `emit_event` | `{entity_id, event, attributes?}` | 发布自定义 span 事件 |
+| `cascade_update` | `{id, attributes, cascade}` | 级联更新实体及下游 |
+| `remediation_next` | `{queue_dir}` | 取下一个待修复队列项 |
+| `remediation_done` | `{rem_id, queue_dir}` | 标记修复完成 |
