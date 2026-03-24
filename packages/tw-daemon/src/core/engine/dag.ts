@@ -42,6 +42,28 @@ export class Dag {
     return result
   }
 
+  /**
+   * 沿反向边（被依赖方向）递归收集所有传递性依赖者。
+   * 即：所有"依赖链最终到达 id"的节点集合。
+   * 用于级联更新：当 UseCase 更新时，找出所有受影响的 Plan/Task。
+   * DAG 边约定：from depends ON to（child → parent），
+   * 因此本方法收集的是 id 的"下游"（所有可达 id 的节点）。
+   */
+  getTransitiveDependents(id: string): string[] {
+    const result = new Set<string>()
+    const queue = [id]
+    while (queue.length > 0) {
+      const current = queue.shift()!
+      for (const [node, deps] of this.deps) {
+        if (deps.has(current) && !result.has(node)) {
+          result.add(node)
+          queue.push(node)
+        }
+      }
+    }
+    return Array.from(result)
+  }
+
   isReady(id: string, states: Map<string, string>): boolean {
     return this.getDependencies(id).every(dep => states.get(dep) === 'completed')
   }

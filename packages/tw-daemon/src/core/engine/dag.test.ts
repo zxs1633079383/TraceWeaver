@@ -76,3 +76,45 @@ describe('removeNode', () => {
     expect(dag.getDependencies('B')).toHaveLength(0)
   })
 })
+
+describe('getTransitiveDependents', () => {
+  // DAG 边约定：from depends ON to（child → parent）
+  // getTransitiveDependents(id) 返回所有依赖链可达 id 的节点（即 id 的"下游"）
+
+  it('returns direct dependents', () => {
+    dag.addNode('uc')
+    dag.addNode('plan-fe')
+    dag.addNode('plan-be')
+    dag.addEdge('plan-fe', 'uc') // plan-fe depends on uc
+    dag.addEdge('plan-be', 'uc')
+    expect(dag.getTransitiveDependents('uc').sort()).toEqual(['plan-be', 'plan-fe'])
+  })
+
+  it('returns transitive dependents across multiple levels', () => {
+    dag.addNode('uc')
+    dag.addNode('plan')
+    dag.addNode('task-1')
+    dag.addNode('task-2')
+    dag.addEdge('plan', 'uc')
+    dag.addEdge('task-1', 'plan')
+    dag.addEdge('task-2', 'plan')
+    const result = dag.getTransitiveDependents('uc').sort()
+    expect(result).toEqual(['plan', 'task-1', 'task-2'])
+  })
+
+  it('returns empty array for leaf node with no dependents', () => {
+    dag.addNode('task-leaf')
+    expect(dag.getTransitiveDependents('task-leaf')).toEqual([])
+  })
+
+  it('returns empty array for unknown node', () => {
+    expect(dag.getTransitiveDependents('UNKNOWN')).toEqual([])
+  })
+
+  it('does not include the node itself', () => {
+    dag.addNode('uc')
+    dag.addNode('plan')
+    dag.addEdge('plan', 'uc')
+    expect(dag.getTransitiveDependents('uc')).not.toContain('uc')
+  })
+})
