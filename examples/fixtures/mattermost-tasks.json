@@ -1,0 +1,665 @@
+{
+  "master": {
+    "tasks": [
+      {
+        "id": "1",
+        "title": "项目基础架构搭建",
+        "description": "创建项目目录结构、配置基础文件、引入必要的 Web 字体和图标库",
+        "details": "1. 创建项目目录结构:\n```\nopen-platform/\n├── css/\n│   └── styles.css\n├── js/\n│   ├── api.js\n│   ├── utils.js\n│   ├── home.js\n│   ├── app-list.js\n│   ├── app-basic-info.js\n│   └── app-webhook.js\n├── assets/\n│   └── icons/\n├── home.html\n├── app-list.html\n├── app-basic-info.html\n└── app-webhook.html\n```\n\n2. 在 styles.css 中引入 Web 字体:\n- Inter: 使用 Google Fonts CDN `https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap`\n- JetBrains Mono: `https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap`\n\n3. 引入 Lucide Icons:\n- 使用 CDN: `https://unpkg.com/lucide@latest`\n- 或使用 SVG sprite 方式本地化\n\n4. 设置 CSS Reset 和全局变量:\n```css\n:root {\n  --primary: #E53935;\n  --primary-hover: #D32F2F;\n  --bg-dark: #000000;\n  --bg-light: #FFFFFF;\n  --bg-gray: #F6F6F6;\n  --text-primary: #000000;\n  --text-secondary: #777777;\n  --text-muted: #999999;\n  --border: #E4E4E4;\n  --divider-dark: #333333;\n  --success-bg: #ECFDF5;\n  --success-border: #A7F3D0;\n  --warning-bg: #FFF5F5;\n}\n```\n\n5. 设置基础布局样式：页面宽度 1440px、Header 高度 48-52px、Sidebar 宽度 200-240px",
+        "testStrategy": "1. 验证所有目录和文件正确创建\n2. 使用浏览器开发者工具检查字体加载状态\n3. 验证 CSS 变量在各浏览器中正常工作\n4. 检查 Lucide Icons 是否正确渲染\n5. 使用 Lighthouse 验证基础性能指标",
+        "priority": "high",
+        "dependencies": [],
+        "status": "done",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "[PRD 5.2] 创建项目目录结构和基础文件",
+            "description": "根据 PRD 5.2 节的文件结构规范，创建完整的项目目录和所有必要的空白文件",
+            "dependencies": [],
+            "details": "创建以下目录结构：\n1. open-platform/css/ 目录并创建 styles.css\n2. open-platform/js/ 目录并创建 api.js, utils.js, home.js, app-list.js, app-basic-info.js, app-webhook.js\n3. open-platform/assets/icons/ 目录\n4. 创建四个 HTML 页面：home.html, app-list.html, app-basic-info.html, app-webhook.html\n\n每个 HTML 文件需包含基础 DOCTYPE 声明、语言设置、viewport meta 标签，并正确引用 styles.css 和对应的 JS 文件",
+            "status": "pending",
+            "testStrategy": "验证所有目录存在且结构正确；验证所有文件已创建；使用浏览器打开 HTML 文件确认无 404 错误",
+            "parentId": "undefined"
+          },
+          {
+            "id": 2,
+            "title": "[PRD 4.1-4.3] CSS Reset 与全局设计变量配置",
+            "description": "在 styles.css 中配置 CSS Reset 和 PRD 4.1-4.3 节定义的全局 CSS 变量",
+            "dependencies": [
+              1
+            ],
+            "details": "在 styles.css 中实现：\n1. CSS Reset (box-sizing: border-box, margin/padding 重置)\n2. 颜色变量：--primary: #E53935, --primary-hover: #D32F2F, --bg-dark: #000000, --bg-light: #FFFFFF, --bg-gray: #F6F6F6, --text-primary: #000000, --text-secondary: #777777, --text-muted: #999999, --border: #E4E4E4, --divider-dark: #333333, --success-bg: #ECFDF5, --success-border: #A7F3D0, --warning-bg: #FFF5F5\n3. 布局变量：--page-width: 1440px, --header-height: 48px (APP页) / 52px (首页), --sidebar-width: 200px (Webhook) / 220px (首页) / 240px (基本信息页)\n4. 字体变量：--font-primary: 'Inter', --font-mono: 'JetBrains Mono'\n5. 基础 body 样式设置",
+            "status": "pending",
+            "testStrategy": "在浏览器开发者工具中检查 :root 变量是否正确定义；验证 CSS Reset 生效；检查各变量在不同浏览器的兼容性",
+            "parentId": "undefined"
+          },
+          {
+            "id": 3,
+            "title": "[PRD 4.2] Web 字体引入 Inter 与 JetBrains Mono",
+            "description": "根据 PRD 4.2 节字体规范，通过 Google Fonts CDN 引入 Inter 和 JetBrains Mono 字体",
+            "dependencies": [
+              1
+            ],
+            "details": "在所有 HTML 文件的 <head> 中引入：\n1. Inter 字体（400/500/600 字重）：https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap\n2. JetBrains Mono 字体（400/500/600 字重）：https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap\n\n字体用途说明：\n- Inter：正文/UI 元素，12-32px\n- JetBrains Mono：品牌文字、代码、版本号，11-14px\n\n在 styles.css 中设置默认字体 font-family 为 Inter，并定义 .font-mono 工具类使用 JetBrains Mono",
+            "status": "pending",
+            "testStrategy": "使用浏览器开发者工具的 Network 面板检查字体加载状态（200 OK）；在 Elements 面板验证 computed font-family 正确；测试不同字重渲染效果",
+            "parentId": "undefined"
+          },
+          {
+            "id": 4,
+            "title": "[PRD 6 注意事项] Lucide Icons 图标库引入",
+            "description": "根据 PRD 6 注意事项第 3 条，引入 Lucide Icons 图标库用于界面图标展示",
+            "dependencies": [
+              1
+            ],
+            "details": "引入 Lucide Icons 方案：\n1. 主方案：在 HTML 中通过 CDN 引入 https://unpkg.com/lucide@latest\n2. 在 utils.js 中创建图标初始化函数 initLucideIcons()\n3. 添加 DOMContentLoaded 事件监听，确保图标正确渲染\n\nLucide Icons 使用方式：\n- HTML 中使用 <i data-lucide=\"icon-name\"></i> 语法\n- 调用 lucide.createIcons() 进行渲染\n\n常用图标预备：message-circle, save, chevron-down, chevron-right, plus, x, check, copy, upload, settings",
+            "status": "pending",
+            "testStrategy": "在 HTML 中添加测试图标元素；验证图标正确渲染（非空白）；检查图标大小、颜色可通过 CSS 控制；测试多个常用图标的显示效果",
+            "parentId": "undefined"
+          }
+        ],
+        "updatedAt": "2026-03-20T10:15:40.864Z"
+      },
+      {
+        "id": "2",
+        "title": "API 服务层封装",
+        "description": "实现统一的 API 调用模块，包含请求拦截、响应处理、错误处理和 Token 管理",
+        "details": "1. 创建 api.js 核心模块:\n```javascript\nconst API_BASE = '/api/cses';\n\nconst ApiService = {\n  // 默认请求头\n  getHeaders() {\n    return {\n      'Content-Type': 'application/json',\n      'appType': 'bct',\n      'device': '',  // WEB 为空\n      'language': 'zh',\n      'deviceId': this.getDeviceId(),\n      'appVersion': '1.0.120',\n      'timeZone': 'Asia/Shanghai',\n      'Authorization': `Bearer ${this.getToken()}`\n    };\n  },\n\n  // 统一请求方法\n  async request(endpoint, options = {}) {\n    const url = `${API_BASE}${endpoint}`;\n    const config = {\n      headers: this.getHeaders(),\n      ...options\n    };\n    \n    try {\n      const response = await fetch(url, config);\n      const data = await response.json();\n      \n      if (data.status !== 'success') {\n        throw new Error(data.message || '请求失败');\n      }\n      return data.data;\n    } catch (error) {\n      Toast.error(error.message);\n      throw error;\n    }\n  }\n};\n```\n\n2. 实现 Bot Agent API 接口封装:\n- `BotAgentApi.create(config)` - POST /bot-agent/config\n- `BotAgentApi.get(botUserId)` - GET /bot-agent/config/{botUserId}\n- `BotAgentApi.delete(botUserId)` - DELETE /bot-agent/config/{botUserId}\n- `BotAgentApi.listEnabled()` - GET /bot-agent/configs/enabled\n- `BotAgentApi.regenerateToken(botUserId)` - POST /bot-agent/config/{botUserId}/regenerate-token\n\n3. 实现 Token 管理:\n- 从 localStorage 读取/存储 Token\n- Token 过期处理和刷新机制\n- 生成唯一 deviceId 并持久化\n\n4. 实现全局 Toast 通知组件用于错误提示",
+        "testStrategy": "1. 编写单元测试验证各 API 方法的请求格式\n2. 使用 Mock Server 模拟 API 响应\n3. 测试网络错误、超时、401/403 等异常场景\n4. 验证 Token 自动携带和刷新逻辑\n5. 测试 Toast 通知在各种错误情况下的显示",
+        "priority": "high",
+        "dependencies": [
+          "1"
+        ],
+        "status": "done",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "[PRD 3.5+5.3] 统一请求封装与公共请求头",
+            "description": "创建 api.js 核心模块，实现统一的请求封装、公共请求头配置、响应处理和错误处理机制",
+            "dependencies": [],
+            "details": "1. 创建 js/api.js 文件，定义 API_BASE = '/api/cses' 常量\n2. 实现 ApiService 对象的 getHeaders() 方法，包含所有公共请求头：Content-Type、appType('bct')、device(空)、language('zh')、deviceId、appVersion('1.0.120')、timeZone('Asia/Shanghai')、Authorization(Bearer Token)\n3. 实现统一的 request(endpoint, options) 异步方法，处理 fetch 请求、JSON 解析、status 校验\n4. 实现 GET/POST/DELETE 快捷方法封装\n5. 统一响应格式处理：检查 data.status !== 'success' 时抛出错误\n6. 实现请求异常捕获，调用 Toast.error() 显示错误信息",
+            "status": "pending",
+            "testStrategy": "1. 使用 Mock fetch 测试请求头是否正确添加\n2. 验证 GET/POST/DELETE 方法参数传递正确\n3. 模拟成功响应验证数据返回格式\n4. 模拟错误响应验证异常抛出和 Toast 调用",
+            "parentId": "undefined"
+          },
+          {
+            "id": 2,
+            "title": "[PRD 3.1] Bot Agent 管理接口封装",
+            "description": "实现 Bot Agent 配置管理相关的所有 API 接口封装，包括创建、获取、删除、列表和Token重新生成",
+            "dependencies": [
+              1
+            ],
+            "details": "1. 创建 BotAgentApi 对象，基于 ApiService 封装以下接口：\n2. create(config) - POST /bot-agent/config：创建/更新 Bot Agent 配置，参数包含 botUserId、agentName、description、webhookUrl、webhookSecret、triggerMode、allowedChannelTypes、enabled\n3. get(botUserId) - GET /bot-agent/config/{botUserId}：获取单个 Bot Agent 配置详情\n4. delete(botUserId) - DELETE /bot-agent/config/{botUserId}：删除 Bot Agent 配置\n5. listEnabled() - GET /bot-agent/configs/enabled：获取所有已启用的 Bot Agent 配置列表\n6. regenerateToken(botUserId) - POST /bot-agent/config/{botUserId}/regenerate-token：重新生成 Bot Token\n7. 每个方法正确处理参数拼接和请求体构造",
+            "status": "pending",
+            "testStrategy": "1. Mock ApiService.request 验证各接口 URL 路径正确\n2. 验证 create 方法请求体 JSON 格式正确\n3. 验证 URL 参数 botUserId 正确插值\n4. 测试列表接口返回数组格式处理",
+            "parentId": "undefined"
+          },
+          {
+            "id": 3,
+            "title": "[PRD 3.2] Bot 群管理接口封装",
+            "description": "实现 Bot 群管理相关的 API 接口封装，包括查询群内Bot、可用Bot列表、添加和移除Bot",
+            "dependencies": [
+              1
+            ],
+            "details": "1. 创建 BotChannelApi 对象，基于 ApiService 封装以下接口：\n2. getChannelBots(channelId) - GET /bot-agent/channel/{channelId}/bots：查询群内已添加的 Bot 列表\n3. getAvailableBots(channelId) - GET /bot-agent/channel/{channelId}/available-bots：查询可添加到群的 Bot 列表（含已添加标记）\n4. addBotToChannel(channelId, botUserId) - POST /bot-agent/channel/{channelId}/bot/{botUserId}：添加 Bot 到群\n5. removeBotFromChannel(channelId, botUserId) - DELETE /bot-agent/channel/{channelId}/bot/{botUserId}：从群移除 Bot\n6. 正确处理双参数 URL 路径拼接",
+            "status": "pending",
+            "testStrategy": "1. Mock ApiService.request 验证各接口 URL 路径正确\n2. 验证 channelId 和 botUserId 参数正确插入 URL\n3. 验证 POST/DELETE 方法类型正确\n4. 测试列表接口返回格式处理",
+            "parentId": "undefined"
+          },
+          {
+            "id": 4,
+            "title": "[PRD 3.3] Bot 消息接口封装",
+            "description": "实现 Bot 消息发送相关的 API 接口封装，支持发送私聊消息和群消息",
+            "dependencies": [
+              1
+            ],
+            "details": "1. 创建 BotMessageApi 对象，基于 ApiService 封装以下接口：\n2. sendDirectMessage(payload) - POST /bot-agent/messages/direct：Bot 发送私聊消息，payload 包含 recipientUserId、content、messageType 等参数\n3. sendChannelMessage(payload) - POST /bot-agent/messages/channel：Bot 发送群消息，payload 包含 channelId、content、messageType 等参数\n4. 实现消息参数校验，确保必填字段存在\n5. 处理消息发送的响应格式，返回消息发送状态",
+            "status": "pending",
+            "testStrategy": "1. Mock ApiService.request 验证接口 URL 正确\n2. 验证私聊和群消息请求体格式正确\n3. 测试必填参数缺失时的错误处理\n4. 验证响应状态正确返回",
+            "parentId": "undefined"
+          },
+          {
+            "id": 5,
+            "title": "[PRD 5.3] Token 管理与 Toast 通知组件",
+            "description": "实现 Token 存储管理、deviceId 生成持久化，以及全局 Toast 通知组件用于错误和成功提示",
+            "dependencies": [],
+            "details": "1. 实现 TokenManager 模块：\n   - getToken()：从 localStorage 读取 access_token\n   - setToken(token)：存储 token 到 localStorage\n   - removeToken()：清除 token\n   - isTokenValid()：检查 token 是否存在且未过期（可选解析 JWT）\n2. 实现 DeviceIdManager 模块：\n   - getDeviceId()：从 localStorage 读取 deviceId，若不存在则生成并存储\n   - generateDeviceId()：生成 32 位大写十六进制随机字符串（如 ED380414932542BAB4993E5AC3E07C64）\n3. 实现 Toast 通知组件：\n   - Toast.success(message)：显示绿色成功提示\n   - Toast.error(message)：显示红色错误提示\n   - Toast.warning(message)：显示黄色警告提示\n   - 支持自动消失（3秒）和手动关闭\n   - 多条消息时堆叠显示",
+            "status": "pending",
+            "testStrategy": "1. 验证 Token 读写 localStorage 正确\n2. 测试 deviceId 生成格式符合要求（32位十六进制大写）\n3. 测试 deviceId 持久化，刷新后保持不变\n4. 验证 Toast 各类型样式正确显示\n5. 测试 Toast 自动消失和手动关闭功能",
+            "parentId": "undefined"
+          }
+        ],
+        "updatedAt": "2026-03-20T10:15:40.868Z"
+      },
+      {
+        "id": "3",
+        "title": "全局组件库开发",
+        "description": "开发可复用的 UI 组件：Header、Sidebar、Button、Input、Card、Modal、Toast、Toggle、Checkbox 等",
+        "details": "1. Header 组件 (48-52px 高度):\n- 黑色背景 #000000\n- 左侧：Logo 图标 + 品牌文字 (JetBrains Mono 14px)\n- 右侧：+ Create 红色按钮、Docs/Teams 链接、用户头像\n- 使用 flexbox space-between 布局\n\n2. Sidebar 组件 (200-240px 宽度):\n- 黑色背景、固定定位\n- 导航项激活状态：左边框 2px #E53935、背景 #1A1A1A\n- 支持 NEW 标签和数字 badge\n- 底部版本号显示\n\n3. Button 组件:\n- 主按钮：bg #E53935，hover #D32F2F，disabled 50% 透明度\n- 次按钮：白色背景、灰色描边\n- 幽灵按钮：透明背景、深灰描边\n- 统一高度 40px，padding 10-12px 24px\n\n4. Input 组件:\n- 高度 40-42px，描边 #E4E4E4\n- Focus 状态：描边变红 + box-shadow\n- Error 状态：红色描边 + 错误提示文字\n- 支持 password 类型和复制按钮\n\n5. Modal 组件:\n- 半透明遮罩 rgba(0,0,0,0.7)\n- 居中白色内容区\n- 支持关闭按钮和 ESC 键关闭\n- 动画：fadeIn + slideUp\n\n6. Toast 组件:\n- 固定右上角定位\n- success/error/warning 三种类型\n- 自动消失 (3秒)\n\n7. Toggle 开关:\n- Off: 背景 #E4E4E4\n- On: 背景 #E53935\n- 过渡动画 0.2s\n\n8. Checkbox:\n- 16x16 尺寸\n- 选中：红色背景 + 白色勾号",
+        "testStrategy": "1. 创建组件演示页面，展示所有组件状态\n2. 测试各组件在不同浏览器中的渲染一致性\n3. 验证交互状态（hover、focus、active、disabled）\n4. 测试键盘可访问性（Tab 导航、Enter 触发）\n5. 验证 Modal 的遮罩点击和 ESC 关闭功能",
+        "priority": "high",
+        "dependencies": [
+          "1"
+        ],
+        "status": "done",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "[PRD 2.1 Header] Header 全局头部组件开发",
+            "description": "开发全局 Header 头部导航组件，包含 Logo、品牌标题、创建按钮、导航链接和用户头像",
+            "dependencies": [],
+            "details": "1. Header 容器：fill_container x 48-52px，背景 #000000，flexbox space-between 布局，padding 0 24px\n2. 左侧区域：Logo 图标 (24-28px 方块，内部白色小方块 cornerRadius:4) + 品牌文字 'DEVELOPER PORTAL' 或 'DEV_PLATFORM'，使用 JetBrains Mono 14px/500，letterSpacing 1-1.5px，颜色 #FFFFFF\n3. 右侧区域：+ Create 红色按钮 (bg #E53935, padding 6 14, 含 + 号和 Create 文字)、Docs/Teams 导航链接 (#FFFFFF99)、用户头像圆形 (28-32px，bg #FFFFFF33)\n4. 支持 props：showCreateButton、onCreateClick、username、avatarUrl\n5. 响应式：中屏时创建按钮文字隐藏只显示 +，小屏时整体收缩",
+            "status": "pending",
+            "testStrategy": "1. 验证 Header 在不同页面中的一致性渲染\n2. 测试 Create 按钮点击事件触发\n3. 验证用户头像 hover 状态\n4. 测试响应式断点下的布局变化",
+            "parentId": "undefined"
+          },
+          {
+            "id": 2,
+            "title": "[PRD 2.1 Sidebar] Sidebar 侧边栏导航组件开发",
+            "description": "开发可复用的 Sidebar 侧边栏组件，支持导航菜单、激活状态、NEW 标签、数字 badge 和底部版本信息",
+            "dependencies": [
+              1
+            ],
+            "details": "1. Sidebar 容器：宽度 200-240px，高度 fill_container，背景 #000000，固定定位，右边框 1px #333333，vertical 布局，padding 20 0\n2. App Selector 区域（可选）：App 图标 + 名称 + 下拉箭头，padding 12 20\n3. 导航分组：NAVIGATION/EXTENSIONS 等标签使用 JetBrains Mono 10-11px/600，#777777，letterSpacing 1\n4. 导航项：高度 44px，padding 10 20，默认文字 #777777，hover 背景 #1A1A1A 文字 #CCCCCC\n5. 激活状态：背景 #1A1A1A，文字 #FFFFFF，左边框 2px #E53935\n6. 支持 NEW 标签（红色小标签）和数字 badge（红色背景圆角）\n7. 底部区域：分隔线 #333333 + 版本号 JetBrains Mono 11px #555555\n8. 支持 props：navItems、activeItem、onNavClick、version、showAppSelector",
+            "status": "pending",
+            "testStrategy": "1. 验证导航项 hover/active 状态样式\n2. 测试导航点击事件和路由跳转\n3. 验证 NEW 标签和 badge 显示\n4. 测试键盘 Tab 导航可访问性\n5. 验证响应式折叠为图标模式",
+            "parentId": "undefined"
+          },
+          {
+            "id": 3,
+            "title": "[PRD 4.4 按钮+输入框] Button 和 Input 基础表单组件开发",
+            "description": "开发 Button 按钮组件（主按钮/次按钮/幽灵按钮）和 Input 输入框组件（含 focus/error 状态）",
+            "dependencies": [],
+            "details": "**Button 组件：**\n1. 主按钮：bg #E53935，hover #D32F2F，disabled rgba(229,57,53,0.5)，文字 #FFFFFF，高度 40px，padding 10-12px 24px\n2. 次按钮：bg #FFFFFF，stroke #E4E4E4，hover bg #F5F5F5，文字 #000000\n3. 幽灵按钮：bg transparent，stroke #555555，hover bg #FFFFFF10\n4. 统一：transition 0.2s，disabled cursor:not-allowed，支持图标 + 文字组合（gap 6-8px）\n5. 支持 props：variant (primary/secondary/ghost)、size、disabled、icon、onClick\n\n**Input 组件：**\n1. 基础样式：高度 40-42px，bg #FFFFFF，stroke #E4E4E4，padding 0 14px，placeholder 颜色 #999999\n2. Focus 状态：stroke #E53935，box-shadow 0 0 0 2px rgba(229,57,53,0.13)\n3. Error 状态：stroke #E53935，下方显示红色错误提示文字\n4. Disabled 状态：bg #F5F5F5，text #999999\n5. 支持 password 类型（带眼睛图标切换）和复制按钮\n6. 支持 props：type、placeholder、value、error、disabled、onCopy",
+            "status": "pending",
+            "testStrategy": "1. 测试 Button 各 variant 的视觉效果\n2. 验证 Button hover/active/disabled 状态\n3. 测试 Input focus/blur 状态切换\n4. 验证 Input error 提示显示/清除\n5. 测试 password 类型的显示/隐藏切换\n6. 测试键盘 Enter 触发提交",
+            "parentId": "undefined"
+          },
+          {
+            "id": 4,
+            "title": "[PRD 2.3 模态框 + 5.3 错误处理] Modal 和 Toast 弹窗组件开发",
+            "description": "开发 Modal 模态框组件（半透明遮罩、居中内容区、动画效果）和 Toast 通知组件（成功/错误/警告类型）",
+            "dependencies": [
+              3
+            ],
+            "details": "**Modal 组件：**\n1. 遮罩层：全屏固定定位，bg rgba(0,0,0,0.7)，z-index 1000\n2. 内容区：居中定位（top 50%, left 50%, transform translate(-50%, -50%)），bg #FFFFFF，stroke #E4E4E4，最大宽度 600px\n3. Header 区域：padding 32 32 24 32，含图标、标题、关闭按钮（32x32，stroke #E4E4E4，× 符号）\n4. 分隔线：fill_container x 1px，bg #E4E4E4\n5. Body 区域：padding 24 32，垂直布局 gap 20\n6. Footer 区域：padding 24 32，按钮右对齐，Cancel + Primary 按钮组合\n7. 动画：fadeIn 遮罩 + slideUp 内容，duration 0.2-0.3s\n8. 支持 ESC 键和遮罩点击关闭\n9. 支持 props：visible、title、onClose、footer、children\n\n**Toast 组件：**\n1. 定位：固定右上角，top 20px，right 20px，z-index 1100\n2. 样式：bg #FFFFFF，stroke #E4E4E4，padding 16，gap 12，box-shadow\n3. 类型：success (绿色图标 #22C55E)、error (红色图标 #E53935)、warning (黄色图标 #F59E0B)\n4. 自动消失：3 秒后 fadeOut\n5. 支持多个 Toast 堆叠（垂直间距 12px）",
+            "status": "pending",
+            "testStrategy": "1. 测试 Modal 打开/关闭动画流畅度\n2. 验证 ESC 键和遮罩点击关闭功能\n3. 测试 Modal 内部 Tab 焦点循环\n4. 验证 Toast success/error/warning 类型样式\n5. 测试 Toast 3 秒自动消失\n6. 测试多个 Toast 堆叠显示",
+            "parentId": "undefined"
+          },
+          {
+            "id": 5,
+            "title": "[PRD 4.4 状态标签] Toggle、Checkbox 和 StatusBadge 状态组件开发",
+            "description": "开发 Toggle 开关、Checkbox 复选框和 StatusBadge 状态标签组件（ACTIVE/REVIEW/DRAFT/NEW）",
+            "dependencies": [
+              3
+            ],
+            "details": "**Toggle 组件：**\n1. 尺寸：36x20px（轨道）+ 16x16px（圆点）\n2. Off 状态：轨道 bg #E4E4E4，圆点在左侧（left 2px）\n3. On 状态：轨道 bg #E53935，圆点在右侧（right 2px）\n4. 过渡动画：transition 0.2s ease-in-out\n5. 支持 props：checked、disabled、onChange\n\n**Checkbox 组件：**\n1. 尺寸：16x16px\n2. 未选中：bg transparent，stroke #E4E4E4 1.5px\n3. 选中：bg #E53935，白色勾号 SVG\n4. 支持 label 文字（右侧，gap 10px）\n5. 支持 props：checked、disabled、label、onChange\n\n**StatusBadge 组件：**\n1. ACTIVE：bg #DCFCE7，text #166534\n2. REVIEW：bg #FEF3C7，text #92400E\n3. DRAFT：bg #F3F4F6，text #6B7280\n4. RUNNING：bg #DBEAFE，text #1E40AF（蓝色）\n5. NEW 标签：bg #E53935，text #FFFFFF，padding 2 6，fontSize 10px\n6. 数字 badge：bg #E53935，text #FFFFFF，圆形，min-width 18px\n7. 支持 props：status、count（用于数字 badge）",
+            "status": "pending",
+            "testStrategy": "1. 测试 Toggle 点击切换动画\n2. 验证 Toggle disabled 状态不可点击\n3. 测试 Checkbox 点击选中/取消\n4. 验证 Checkbox 与 label 文字对齐\n5. 测试 StatusBadge 各状态颜色正确\n6. 验证 NEW 标签和数字 badge 显示",
+            "parentId": "undefined"
+          }
+        ],
+        "updatedAt": "2026-03-20T10:15:40.872Z"
+      },
+      {
+        "id": "4",
+        "title": "首页 Dashboard 实现",
+        "description": "实现开发者首页，包含欢迎区域、统计卡片、最近开发应用列表和功能引导卡片",
+        "details": "1. 页面结构 (home.html):\n```html\n<div class=\"page-container\">\n  <header class=\"header\">...</header>\n  <div class=\"body\">\n    <aside class=\"sidebar\">...</aside>\n    <main class=\"main-content\">\n      <section class=\"hero-section\">...</section>\n      <section class=\"stats-row\">...</section>\n      <section class=\"continue-dev\">...</section>\n      <section class=\"more-ways\">...</section>\n    </main>\n  </div>\n</div>\n```\n\n2. Hero Section:\n- 标题：\"Welcome back, Developer\" (Inter 32px/600)\n- 副标题：\"Build, deploy, and manage...\" (Inter 14px, #777777)\n- padding: 40px 40px 32px 40px\n\n3. Stats Row (4 个统计卡片):\n- 横向排列，gap 20px\n- 每卡片：白色背景、灰色描边、padding 24px\n- 第 2 个卡片（Active Bots）红色高亮背景\n- 数据从 API 获取：Apps Created / Active Bots / API Calls / Webhooks\n\n4. Continue Development Section:\n- 标题行：\"Continue Development\" + \"All Apps →\" 红色链接\n- App 卡片列表（最多 3 个）\n- 每卡片显示：名称、类型、webhooks/events 数量、状态标签、时间\n- 状态标签：In Review（橙色）/ In Progress（蓝色）/ Completed（绿色）\n\n5. More Ways Section (2x3 网格):\n- 6 个功能引导卡片\n- 每卡片：序号、标题、描述、\"Start →\" 红色链接\n- 功能：Build a Bot / Event Subscriptions / Launch Activities / Manage Webhooks / Slash Commands / OAuth Integration\n\n6. home.js 逻辑:\n- 页面加载时调用 BotAgentApi.listEnabled() 获取数据\n- 渲染统计数据和最近应用列表\n- 绑定导航点击事件",
+        "testStrategy": "1. 验证页面在 1440px 宽度下的布局符合设计稿\n2. 测试 API 数据加载和渲染\n3. 验证统计数字的格式化显示（如 1.2k）\n4. 测试各链接和按钮的跳转功能\n5. 验证 Loading 状态和空数据状态的展示\n6. 对比设计稿截图进行像素级验证",
+        "priority": "high",
+        "dependencies": [
+          "2",
+          "3"
+        ],
+        "status": "done",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "[PRD 2.1] Hero 欢迎区域实现",
+            "description": "实现首页 Hero Section 欢迎区域，包含标题和副标题的样式布局",
+            "dependencies": [],
+            "details": "1. 创建 Hero Section 区域结构:\n   - 外层容器: padding 40px 40px 32px 40px, vertical 布局, gap 6px\n   - 主标题: \"Welcome back, Developer\", Inter 32px/600, 颜色 #000000\n   - 副标题: \"Build, deploy, and manage your bot agents with powerful APIs and intuitive tools.\", Inter 14px/400, 颜色 #777777, line-height 1.5\n2. CSS 样式:\n   ```css\n   .hero-section {\n     padding: 40px 40px 32px 40px;\n     display: flex;\n     flex-direction: column;\n     gap: 6px;\n   }\n   .hero-title {\n     font-family: 'Inter', sans-serif;\n     font-size: 32px;\n     font-weight: 600;\n     color: #000000;\n   }\n   .hero-subtitle {\n     font-family: 'Inter', sans-serif;\n     font-size: 14px;\n     color: #777777;\n     line-height: 1.5;\n   }\n   ```\n3. HTML 结构需放置在 main-content 容器内的第一个 section",
+            "status": "pending",
+            "testStrategy": "1. 验证标题文字与设计稿一致\n2. 使用浏览器开发者工具检查 Inter 字体是否正确加载\n3. 验证 padding 和 gap 间距符合设计规范\n4. 对比设计稿 0IgHR.png 进行像素级验证",
+            "parentId": "undefined"
+          },
+          {
+            "id": 2,
+            "title": "[PRD 2.1] Stats Row 统计卡片行实现",
+            "description": "实现首页统计数据卡片行，包含 4 个统计卡片（Bot Created、Active Bots、API Calls 24H、Webhooks）",
+            "dependencies": [
+              1
+            ],
+            "details": "1. Stats Row 容器样式:\n   - 横向排列 (display: flex), gap 20px\n   - padding: 0 40px\n   - 每个卡片: fill_container 宽度 (flex: 1)\n\n2. 统计卡片结构 (4 个):\n   ```html\n   <div class=\"stat-card\">\n     <div class=\"stat-value\">04</div>\n     <div class=\"stat-label\">Bot Created</div>\n   </div>\n   ```\n\n3. 卡片样式:\n   - 背景: #FFFFFF\n   - 边框: 1px solid #E4E4E4\n   - 内边距: 24px\n   - vertical 布局, gap 4px\n   - 数值: Inter 24-28px/600, #000000\n   - 标签: Inter 12px/500, #777777\n\n4. 第 2 个卡片 (Active Bots) 特殊样式:\n   - 背景: #E53935 (红色高亮)\n   - 文字: #FFFFFF\n\n5. 数据字段映射:\n   - Bot Created: 从 API 获取应用总数\n   - Active Bots: 已激活的 Bot 数量\n   - API Calls 24H: 24小时内 API 调用次数\n   - Webhooks: Webhook 配置数量\n\n6. 数字格式化: 大数字显示为 1.2k 格式",
+            "status": "pending",
+            "testStrategy": "1. 验证 4 个卡片横向排列且等宽\n2. 验证第 2 个卡片的红色高亮样式\n3. 测试数字格式化显示（如 1234 显示为 1.2k）\n4. 验证卡片边框和内边距符合设计规范\n5. 对比设计稿 Stats Row 区域进行验证",
+            "parentId": "undefined"
+          },
+          {
+            "id": 3,
+            "title": "[PRD 2.1] Continue Development 最近开发列表实现",
+            "description": "实现 Continue Development 区域，展示最近开发中的应用卡片列表（最多 3 个），含状态标签和操作链接",
+            "dependencies": [
+              1
+            ],
+            "details": "1. 区域结构:\n   ```html\n   <section class=\"continue-dev\">\n     <div class=\"section-header\">\n       <span class=\"section-title\">Continue Development</span>\n       <a class=\"section-link\" href=\"app-list.html\">All Apps →</a>\n     </div>\n     <div class=\"app-cards-row\">...</div>\n   </section>\n   ```\n\n2. 头部样式:\n   - space_between 布局\n   - 标题: Inter 14px/600, #000000\n   - \"All Apps →\" 链接: Inter 12px/500, #E53935\n\n3. App 卡片结构 (最多 3 个):\n   - 横向排列, gap 16px\n   - 每卡片: fill_container 宽度, 白色背景, 边框 #E4E4E4\n   - 内容:\n     a. 红色图标 (40x40, 首字母)\n     b. 应用名称 (Inter 14px/600)\n     c. 类型/描述 (Inter 12px, #777777)\n     d. 统计: \"X webhooks · Y events\" (#777777)\n     e. 状态标签\n     f. 时间信息\n     g. \"Settings →\" 红色链接\n\n4. 状态标签样式:\n   - In Review: 橙色背景 #FFF3E0, 文字 #F57C00\n   - In Progress: 蓝色背景 #E3F2FD, 文字 #1976D2\n   - Completed: 绿色背景 #E8F5E9, 文字 #388E3C\n\n5. 数据来源: 从 BotAgentApi.listEnabled() 获取最近 3 个应用",
+            "status": "pending",
+            "testStrategy": "1. 验证最多显示 3 个应用卡片\n2. 测试不同状态标签的颜色样式\n3. 验证点击 \"All Apps →\" 跳转到 APP 列表页\n4. 验证点击 \"Settings →\" 跳转到对应 APP 基本信息页\n5. 测试空数据状态的展示",
+            "parentId": "undefined"
+          },
+          {
+            "id": 4,
+            "title": "[PRD 2.1] More Ways 功能引导卡片网格实现",
+            "description": "实现 More Ways Section 功能引导区域，包含 2x3 网格布局的 6 个功能引导卡片",
+            "dependencies": [
+              1
+            ],
+            "details": "1. 区域结构:\n   ```html\n   <section class=\"more-ways\">\n     <h3 class=\"section-title\">More ways to empower your platform</h3>\n     <div class=\"feature-grid\">\n       <div class=\"feature-row\"><!-- 3 cards --></div>\n       <div class=\"feature-row\"><!-- 3 cards --></div>\n     </div>\n   </section>\n   ```\n\n2. 区域样式:\n   - padding: 0 40px 40px 40px\n   - vertical 布局, gap 16px\n   - 标题: Inter 14px/600, #000000\n\n3. 功能引导卡片结构:\n   ```html\n   <div class=\"feature-card\">\n     <span class=\"feature-num\">01</span>\n     <h4 class=\"feature-title\">Build a Bot</h4>\n     <p class=\"feature-desc\">Create intelligent bot agents...</p>\n     <a class=\"feature-link\">Start →</a>\n   </div>\n   ```\n\n4. 卡片样式:\n   - fill_container 宽度 (flex: 1)\n   - 白色背景, 边框 #E4E4E4\n   - padding: 20px\n   - vertical 布局, gap 8px\n   - 序号: JetBrains Mono 11px/500, #999999\n   - 标题: Inter 14px/600, #000000\n   - 描述: Inter 12px, #777777, 2-3 行\n   - \"Start →\": Inter 12px/500, #E53935\n\n5. 6 个功能卡片内容:\n   Row 1: Build a Bot / Event Subscriptions / Launch Activities\n   Row 2: Manage Webhooks / Slash Commands / OAuth Integration\n\n6. 每个卡片的描述文字需根据功能编写",
+            "status": "pending",
+            "testStrategy": "1. 验证 2x3 网格布局正确显示\n2. 验证每行 3 个卡片等宽排列\n3. 测试 \"Start →\" 链接的跳转功能\n4. 验证卡片 hover 效果（如有）\n5. 对比设计稿 More Ways Section 区域进行验证",
+            "parentId": "undefined"
+          },
+          {
+            "id": 5,
+            "title": "[PRD 2.1] 首页数据加载与交互绑定",
+            "description": "实现 home.js 中的数据加载逻辑和交互事件绑定，包括 API 调用、数据渲染和导航跳转",
+            "dependencies": [
+              2,
+              3,
+              4
+            ],
+            "details": "1. home.js 主要功能:\n   ```javascript\n   const HomePage = {\n     async init() {\n       await this.loadData();\n       this.bindEvents();\n     },\n     \n     async loadData() {\n       // 显示 Loading 状态\n       this.showLoading();\n       try {\n         const apps = await BotAgentApi.listEnabled();\n         this.renderStats(apps);\n         this.renderRecentApps(apps.slice(0, 3));\n       } catch (error) {\n         Toast.error('数据加载失败');\n       } finally {\n         this.hideLoading();\n       }\n     },\n     \n     renderStats(apps) {\n       // 渲染统计卡片数据\n     },\n     \n     renderRecentApps(apps) {\n       // 渲染最近开发的应用列表\n     },\n     \n     bindEvents() {\n       // 绑定导航和点击事件\n     }\n   };\n   ```\n\n2. 数据加载:\n   - 页面加载时调用 BotAgentApi.listEnabled() 获取应用列表\n   - 计算统计数据: 应用总数、活跃 Bot 数、API 调用数、Webhook 数\n   - 获取最近 3 个应用用于 Continue Development 区域\n\n3. 交互事件绑定:\n   - 点击 \"+ Create\" 按钮 → 打开创建 APP 模态框\n   - 点击 \"All Apps →\" → 跳转到 app-list.html\n   - 点击应用卡片 \"Settings →\" → 跳转到 app-basic-info.html?botUserId=xxx\n   - 点击 More Ways 卡片 \"Start →\" → 跳转到对应功能页\n   - 侧边栏导航点击事件\n\n4. Loading 状态:\n   - 统计卡片显示骨架屏\n   - 应用列表显示加载动画\n\n5. 空数据状态:\n   - 无应用时显示引导创建文案\n   - 统计数字显示 0",
+            "status": "pending",
+            "testStrategy": "1. 测试 API 数据加载和渲染流程\n2. 验证 Loading 状态的显示和隐藏\n3. 测试各链接和按钮的跳转功能\n4. 验证空数据状态的展示\n5. 模拟 API 错误，验证 Toast 错误提示\n6. 测试数据格式化（大数字显示为 1.2k 格式）\n7. 验证页面在 1440px 宽度下的整体布局",
+            "parentId": "undefined"
+          }
+        ],
+        "updatedAt": "2026-03-20T10:21:28.593Z"
+      },
+      {
+        "id": "5",
+        "title": "APP 列表页实现",
+        "description": "实现 APP 列表展示页面，支持搜索、筛选、网格/列表视图切换，以及 APP 卡片的增删操作",
+        "details": "1. 页面布局 (app-list.html):\n- Header + Sidebar + Main Content 三栏结构\n- Sidebar 简化版：Home / APP（激活）/ Enterprise Debug Tools\n\n2. Title Row:\n- 左侧：\"APP\" 大标题 + 描述文字\n- 右侧：\"+ New APP\" 红色按钮 (触发创建模态框)\n\n3. Controls Row:\n- 搜索框 (280px 宽)：placeholder \"Search apps...\"\n- 类型筛选下拉：All Types / Bot / App\n- 视图切换：网格/列表/紧凑 三种视图图标\n\n4. Stats 显示:\n- \"06 apps registered\" 红色数字突出\n\n5. Apps Grid (2x3 网格):\n- gap 20px\n- 响应式：1200px 以下改为 2 列\n\n6. App Card 组件:\n```html\n<div class=\"app-card\">\n  <div class=\"card-header\">\n    <div class=\"app-icon\">C</div>\n    <div class=\"app-info\">\n      <span class=\"app-name\">ChatBot Pro</span>\n      <span class=\"app-id\">app_id: cli_7f3a9b2e</span>\n    </div>\n    <span class=\"status-badge active\">ACTIVE</span>\n  </div>\n  <div class=\"card-stats\">3 permissions · 2 webhooks · 1 command</div>\n  <div class=\"card-actions\">\n    <a href=\"#\" class=\"action-link primary\">Settings →</a>\n    <a href=\"#\" class=\"action-link\">Bot →</a>\n    <a href=\"#\" class=\"action-link danger\">Delete</a>\n  </div>\n</div>\n```\n\n7. app-list.js 逻辑:\n- 调用 BotAgentApi.listEnabled() 获取列表\n- 实现实时搜索过滤（防抖 300ms）\n- 实现类型筛选\n- 删除确认：弹出确认框 → 调用 delete API → 刷新列表\n- 视图切换：保存到 localStorage",
+        "testStrategy": "1. 验证列表数据正确加载和渲染\n2. 测试搜索功能的实时过滤效果\n3. 测试类型筛选的正确性\n4. 验证删除功能：确认框 → API 调用 → 列表刷新\n5. 测试视图切换的样式变化和状态持久化\n6. 验证空列表状态的展示\n7. 测试分页（如有大量数据）",
+        "priority": "high",
+        "dependencies": [
+          "2",
+          "3"
+        ],
+        "status": "done",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "[PRD 2.2 页面元素] 页面布局与Title Row实现",
+            "description": "实现APP列表页的三栏布局结构（Header + Sidebar + Main Content），以及Title Row区域包含大标题、描述文字和新建APP按钮",
+            "dependencies": [],
+            "details": "1. 创建 app-list.html 页面基础结构:\n   - Header组件: 复用全局Header (48px高，黑色背景 #000000)，包含 DEV_PLATFORM logo、+ Create按钮、Docs/Teams导航、用户头像\n   - Sidebar组件: 240px宽，黑色背景，简化导航菜单 (Home / APP激活状态 / Enterprise Debug Tools)\n   - Main Content: fill_container，白色背景 #FFFFFF，padding 40px，vertical布局 gap 32px\n\n2. Title Row 实现:\n   - 左侧 titleBlock: vertical布局 gap 6px\n     - 大标题 \"APP\": Inter 28px/600, #000000\n     - 描述文字 \"Build and manage your platform applications.\": Inter 13px, #777777\n   - 右侧 newAppBtn: 红色按钮 bg #E53935, padding 12 24, gap 8\n     - \"+\" 符号 + \"New APP\" 文字，白色 #FFFFFF\n   - 整体 space_between 布局\n\n3. CSS样式定义:\n   ```css\n   .app-list-page { display: flex; min-height: 100vh; }\n   .title-row { display: flex; justify-content: space-between; align-items: flex-start; }\n   .title-block { display: flex; flex-direction: column; gap: 6px; }\n   .page-title { font-size: 28px; font-weight: 600; color: #000000; }\n   .page-desc { font-size: 13px; color: #777777; }\n   .new-app-btn { background: #E53935; color: #FFFFFF; padding: 12px 24px; display: flex; gap: 8px; }\n   ```",
+            "status": "pending",
+            "testStrategy": "1. 验证三栏布局在 1440px 宽度下符合设计稿 Sgw2y.png\n2. 验证 Sidebar 中 APP 导航项为激活状态（左边框2px红色，背景 #1A1A1A）\n3. 测试 \"+ New APP\" 按钮点击事件触发创建模态框\n4. 验证 Title Row 左右对齐和间距正确",
+            "parentId": "undefined"
+          },
+          {
+            "id": 2,
+            "title": "[PRD 2.2 Controls Row] 搜索框与筛选控件实现",
+            "description": "实现Controls Row区域，包含搜索框（280px宽）、类型筛选下拉框（All Types/Bot/App）、视图切换图标组（网格/列表/紧凑），以及apps统计显示",
+            "dependencies": [
+              1
+            ],
+            "details": "1. Controls Row 容器结构:\n   - 横向布局 display: flex, gap 12px, space_between\n   - 左侧控件组: 搜索框 + 类型筛选\n   - 右侧: spacer (fill_container) + 视图切换组\n\n2. 搜索框实现:\n   - 尺寸: 280px 宽 x 40px 高\n   - 样式: 边框 #E4E4E4, padding 0 12px\n   - 图标: 左侧搜索图标 (lucide search)\n   - placeholder: \"Search apps...\"\n   - 实时搜索: 输入时触发防抖搜索 (300ms)\n\n3. 类型筛选下拉框:\n   - 高度 40px, 边框 #E4E4E4, padding 0 12px\n   - 选项: All Types / Bot / App\n   - 下拉箭头图标 (lucide chevron-down)\n   - 选中后触发列表过滤\n\n4. 视图切换组:\n   - 三个图标按钮: 网格视图 / 列表视图 / 紧凑视图\n   - 边框 #E4E4E4, 当前激活项高亮\n   - 图标使用 lucide: grid-3x3 / list / layout-list\n\n5. Stats 显示:\n   - 格式: \"06 apps registered\"\n   - 红色数字 #E53935 突出显示\n   - 位于 Controls Row 下方或 Apps Grid 上方\n\n6. CSS样式:\n   ```css\n   .controls-row { display: flex; gap: 12px; align-items: center; }\n   .search-bar { width: 280px; height: 40px; border: 1px solid #E4E4E4; padding: 0 12px; }\n   .type-filter { height: 40px; border: 1px solid #E4E4E4; padding: 0 12px; }\n   .view-toggle { display: flex; border: 1px solid #E4E4E4; }\n   .stats-count { color: #E53935; font-weight: 600; }\n   ```",
+            "status": "pending",
+            "testStrategy": "1. 验证搜索框输入后 300ms 延迟触发过滤\n2. 测试类型筛选下拉切换后列表正确过滤\n3. 验证视图切换图标点击后激活状态变化\n4. 测试视图偏好保存到 localStorage 并刷新后保持\n5. 验证 apps 统计数字正确显示且红色高亮",
+            "parentId": "undefined"
+          },
+          {
+            "id": 3,
+            "title": "[PRD 2.2 App卡片信息] App Card组件与网格布局实现",
+            "description": "实现App Card组件（包含图标、名称、状态标签、版本号、统计数据、操作链接），以及2x3响应式网格布局",
+            "dependencies": [
+              1
+            ],
+            "details": "1. Apps Grid 容器:\n   - CSS Grid 布局: grid-template-columns: repeat(3, 1fr)\n   - gap: 20px\n   - 响应式: @media (max-width: 1200px) 改为 repeat(2, 1fr)\n\n2. App Card 结构:\n   ```html\n   <div class=\"app-card\">\n     <div class=\"card-header\">\n       <div class=\"app-icon\" style=\"background:#E53935\">G</div>\n       <div class=\"app-info\">\n         <span class=\"app-name\">Gradient Pro</span>\n         <span class=\"app-version\">v2.1</span>\n       </div>\n       <span class=\"status-badge active\">ACTIVE</span>\n     </div>\n     <div class=\"card-stats\">3 Permissions · 2 Webhooks · 1 Installations</div>\n     <div class=\"card-actions\">\n       <a class=\"action-link primary\">Settings →</a>\n       <a class=\"action-link\">SLA →</a>\n       <a class=\"action-link danger\">Delete</a>\n     </div>\n   </div>\n   ```\n\n3. Card Header 样式:\n   - 横向布局 space_between, padding 16 20\n   - app-icon: 40x40px, bg #E53935, cornerRadius 8, 居中显示首字母白色\n   - app-info: vertical gap 2px, 名称 Inter 14px/600, 版本号 Inter 11px #999999\n   - status-badge: 根据状态显示不同颜色 (ACTIVE绿色/REVIEW黄色/DRAFT灰色/RUNNING蓝色)\n\n4. Card Stats 样式:\n   - padding 0 20, Inter 12px, #777777\n   - 格式: \"X Permissions · Y Webhooks · Z Installations\"\n\n5. Card Actions 样式:\n   - 横向布局, padding 12 20, gap 16\n   - Settings →: 红色 #E53935\n   - SLA →: 灰色 #777777\n   - Delete: 灰色 #777777, hover 变红色\n\n6. 卡片 Hover 效果:\n   - box-shadow: 0 2px 8px rgba(0,0,0,0.08)\n   - transform: translateY(-2px)\n   - transition: 0.2s",
+            "status": "pending",
+            "testStrategy": "1. 验证网格在 1440px 下显示 3 列\n2. 验证响应式断点 1200px 下改为 2 列\n3. 测试各状态标签颜色正确 (ACTIVE/REVIEW/DRAFT/RUNNING)\n4. 验证卡片 hover 效果和动画流畅度\n5. 测试 Settings → 点击跳转到 app-basic-info.html?botUserId=xxx\n6. 对比设计稿 Sgw2y.png 验证卡片样式",
+            "parentId": "undefined"
+          },
+          {
+            "id": 4,
+            "title": "[PRD 2.2 交互说明+关联接口] 删除确认与API调用实现",
+            "description": "实现删除APP功能，包含确认对话框显示、调用DELETE API接口、删除后刷新列表，以及\"+ New APP\"按钮触发创建模态框",
+            "dependencies": [
+              2,
+              3
+            ],
+            "details": "1. 删除功能实现流程:\n   a. 点击卡片 Delete 链接 → 阻止默认行为\n   b. 弹出确认对话框:\n      ```html\n      <div class=\"confirm-dialog\">\n        <h3>确认删除</h3>\n        <p>确定要删除应用 \"AppName\" 吗？此操作不可撤销。</p>\n        <div class=\"dialog-actions\">\n          <button class=\"btn-secondary\">取消</button>\n          <button class=\"btn-danger\">确认删除</button>\n        </div>\n      </div>\n      ```\n   c. 确认后调用 API: BotAgentApi.delete(botUserId)\n   d. 成功后: Toast.success('应用已删除') + 刷新列表\n   e. 失败时: Toast.error(错误信息)\n\n2. API 调用代码:\n   ```javascript\n   async function deleteApp(botUserId, appName) {\n     confirmDialog(`确定要删除应用 \"${appName}\" 吗？此操作不可撤销。`, async () => {\n       try {\n         await BotAgentApi.delete(botUserId);\n         Toast.success('应用已删除');\n         await loadAppList(); // 刷新列表\n       } catch (error) {\n         Toast.error(error.message || '删除失败');\n       }\n     });\n   }\n   ```\n\n3. \"+ New APP\" 按钮功能:\n   - 点击触发创建 APP 模态框显示\n   - 调用 Modal.open('createAppModal') 或 showCreateAppModal()\n\n4. 错误处理:\n   - 网络错误: 显示 Toast 错误提示\n   - 403 权限不足: 提示无权限操作\n   - 404 应用不存在: 提示应用已被删除并刷新列表\n\n5. Loading 状态:\n   - 删除请求期间禁用确认按钮\n   - 显示加载动画\n   - 防止重复点击",
+            "status": "pending",
+            "testStrategy": "1. 验证点击 Delete 弹出确认对话框\n2. 测试取消按钮关闭对话框不执行删除\n3. 验证确认删除后 API 调用正确 (DELETE /api/cses/bot-agent/config/{botUserId})\n4. 测试删除成功后列表刷新且被删除的应用消失\n5. 模拟 API 错误，验证错误提示正确显示\n6. 测试 \"+ New APP\" 按钮正确打开创建模态框",
+            "parentId": "undefined"
+          },
+          {
+            "id": 5,
+            "title": "[PRD 2.2 关联接口] 数据加载与状态管理实现",
+            "description": "实现app-list.js中的数据加载逻辑，包括调用BotAgentApi.listEnabled()获取列表、实现实时搜索过滤（防抖300ms）、类型筛选、视图切换状态持久化",
+            "dependencies": [
+              2,
+              3,
+              4
+            ],
+            "details": "1. app-list.js 核心模块结构:\n   ```javascript\n   const AppListPage = {\n     apps: [],           // 原始数据\n     filteredApps: [],   // 过滤后数据\n     searchTerm: '',\n     filterType: 'all',\n     viewMode: 'grid',   // grid / list / compact\n     \n     async init() {\n       this.loadViewMode();\n       await this.loadData();\n       this.bindEvents();\n     },\n     \n     async loadData() {\n       this.showLoading();\n       try {\n         this.apps = await BotAgentApi.listEnabled();\n         this.applyFilters();\n         this.render();\n       } catch (error) {\n         Toast.error('数据加载失败');\n         this.showEmptyState();\n       } finally {\n         this.hideLoading();\n       }\n     }\n   };\n   ```\n\n2. 搜索过滤实现 (防抖 300ms):\n   ```javascript\n   const searchInput = document.getElementById('searchInput');\n   searchInput.addEventListener('input', debounce((e) => {\n     AppListPage.searchTerm = e.target.value.toLowerCase();\n     AppListPage.applyFilters();\n   }, 300));\n   \n   applyFilters() {\n     this.filteredApps = this.apps.filter(app => {\n       const matchSearch = app.agentName.toLowerCase().includes(this.searchTerm);\n       const matchType = this.filterType === 'all' || app.type === this.filterType;\n       return matchSearch && matchType;\n     });\n     this.render();\n   }\n   ```\n\n3. 类型筛选实现:\n   ```javascript\n   typeFilter.addEventListener('change', (e) => {\n     AppListPage.filterType = e.target.value;\n     AppListPage.applyFilters();\n   });\n   ```\n\n4. 视图切换与持久化:\n   ```javascript\n   loadViewMode() {\n     this.viewMode = Storage.get('appListViewMode', 'grid');\n     this.updateViewToggle();\n   },\n   \n   setViewMode(mode) {\n     this.viewMode = mode;\n     Storage.set('appListViewMode', mode);\n     this.updateViewToggle();\n     this.render();\n   }\n   ```\n\n5. 空状态处理:\n   - 无应用时显示空状态引导\n   - 搜索无结果时显示 \"未找到匹配的应用\"\n\n6. Loading 状态:\n   - 骨架屏占位显示\n   - 加载完成后渲染真实数据",
+            "status": "pending",
+            "testStrategy": "1. 验证页面加载时正确调用 BotAgentApi.listEnabled() 获取数据\n2. 测试搜索输入 300ms 防抖生效\n3. 验证搜索结果实时过滤正确\n4. 测试类型筛选 (All Types / Bot / App) 过滤正确\n5. 验证视图切换后状态保存到 localStorage\n6. 刷新页面后验证视图模式恢复\n7. 测试空列表状态的展示\n8. 验证 Loading 骨架屏正确显示和隐藏",
+            "parentId": "undefined"
+          }
+        ],
+        "updatedAt": "2026-03-20T10:21:28.595Z"
+      },
+      {
+        "id": "6",
+        "title": "创建 APP 模态框实现",
+        "description": "实现创建新应用的模态框表单，包含应用名称、描述、图标上传和条款同意",
+        "details": "1. Modal 结构:\n```html\n<div class=\"modal-overlay\">\n  <div class=\"modal create-app-modal\">\n    <div class=\"modal-header\">\n      <div class=\"app-icon-preview\"></div>\n      <button class=\"close-btn\">×</button>\n      <h2>Create New App</h2>\n      <p>Configure your application for the developer platform</p>\n    </div>\n    <div class=\"modal-body\">\n      <!-- Form fields -->\n    </div>\n    <div class=\"modal-footer\">\n      <!-- Checkbox + Buttons -->\n    </div>\n  </div>\n</div>\n```\n\n2. 表单字段:\n- App Name（必填）：输入框 + 红色星号标记\n- Description（可选）：多行文本框 + \"Optional — max 200 characters\" 提示\n- App Icon：拖拽上传区域\n  - 支持 click 选择和 drag-drop\n  - 格式限制：PNG, JPG\n  - 尺寸推荐：512x512\n  - 上传后显示预览\n\n3. 条款同意 Checkbox:\n- \"I agree to the Developer Terms of Service and Developer Policy\"\n- 未勾选时禁用 Create App 按钮\n\n4. 按钮:\n- Cancel：关闭模态框\n- Create App →：提交表单\n\n5. 表单验证:\n```javascript\nfunction validateForm() {\n  const name = document.getElementById('appName').value.trim();\n  const agreed = document.getElementById('agreeTerms').checked;\n  \n  const createBtn = document.getElementById('createBtn');\n  createBtn.disabled = !name || !agreed;\n}\n```\n\n6. 提交逻辑:\n```javascript\nasync function createApp() {\n  const formData = {\n    botUserId: generateBotUserId(),\n    agentName: appName,\n    description: description,\n    webhookUrl: '',\n    webhookSecret: '',\n    triggerMode: 'all',\n    allowedChannelTypes: ['all'],\n    enabled: false\n  };\n  \n  const result = await BotAgentApi.create(formData);\n  closeModal();\n  window.location.href = `app-basic-info.html?botUserId=${result.botUserId}`;\n}\n```\n\n7. 图标上传:\n- 使用 FileReader 预览\n- 可考虑 Base64 编码或独立上传接口",
+        "testStrategy": "1. 验证模态框打开/关闭动画\n2. 测试点击遮罩层和 X 按钮关闭\n3. 测试 ESC 键关闭功能\n4. 验证表单验证逻辑（必填项、字符限制）\n5. 测试图标上传：文件选择、拖拽、格式限制、预览\n6. 验证提交成功后的跳转\n7. 测试提交失败时的错误提示",
+        "priority": "high",
+        "dependencies": [
+          "3",
+          "5"
+        ],
+        "status": "done",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "[PRD 2.3] Modal 弹窗结构与样式实现",
+            "description": "创建创建 APP 模态框的 HTML 结构和 CSS 样式，包括半透明遮罩层、居中定位的模态框容器、头部区域（App 图标、关闭按钮、标题副标题）",
+            "dependencies": [],
+            "details": "1. 创建 Modal 遮罩层（fill:#000000B3 半透明黑色背景）\n2. Modal 容器：600px 宽度，居中定位（x:420, y:96），白色背景，灰色描边 #E4E4E4\n3. Header 区域：\n   - AppIconHeader: 56x56 黑色方块，居中显示\n   - CloseBtn: 32x32 描边按钮，显示 × 符号\n   - TitleBlock: 'Create New App' 标题（Inter 22/600）+ 副标题（Inter 13, #777777）\n4. 分隔线：fill_container x 1, #E4E4E4\n5. 实现点击遮罩层和 X 按钮关闭模态框功能\n6. 实现 ESC 键关闭模态框功能",
+            "status": "pending",
+            "testStrategy": "1. 验证模态框打开时遮罩层正确显示\n2. 测试点击遮罩层关闭模态框\n3. 测试点击 X 按钮关闭模态框\n4. 测试 ESC 键关闭功能\n5. 验证模态框居中定位正确\n6. 检查所有字体、颜色、尺寸符合设计稿",
+            "parentId": "undefined"
+          },
+          {
+            "id": 2,
+            "title": "[PRD 2.3] App Name 与 Description 表单字段实现",
+            "description": "实现 App Name 必填输入框和 Description 可选多行文本框，包含标签、占位符、字符限制提示等",
+            "dependencies": [
+              1
+            ],
+            "details": "1. App Name 字段（NameField）：\n   - 标签行：'App Name' + 红色 * 必填标记\n   - 输入框：fill_container x 42 高度，描边 #E4E4E4，padding:0 14\n   - placeholder: 'Enter your app name'\n2. Description 字段（DescField）：\n   - 标签：'Description'（Inter 12/500）\n   - 多行文本框：fill_container x 88 高度，描边 #E4E4E4，padding:10 14\n   - placeholder: 'Briefly describe what your app does'\n   - 提示文字：'Optional — max 200 characters'（JetBrains Mono 11, #999999）\n3. 实现输入框 Focus 状态样式（stroke:#E53935, box-shadow）\n4. 实现 Description 200 字符限制",
+            "status": "pending",
+            "testStrategy": "1. 验证 App Name 显示红色必填标记\n2. 测试输入框 focus 状态视觉变化\n3. 验证 Description 多行输入功能\n4. 测试 200 字符限制是否生效\n5. 验证 placeholder 文字正确显示",
+            "parentId": "undefined"
+          },
+          {
+            "id": 3,
+            "title": "[PRD 2.3] App Icon 拖拽上传区域实现",
+            "description": "实现 App Icon 上传区域，支持点击选择文件和拖拽上传，格式限制 PNG/JPG，推荐尺寸 512x512，上传后显示预览",
+            "dependencies": [
+              1
+            ],
+            "details": "1. IconField 结构：\n   - 标签：'App Icon'（Inter 12/500）\n   - IconUploadArea：fill_container x 100 高度，fill:#FAFAFA，stroke:#E4E4E4，居中布局\n   - 上传图标：黑色方块图标\n   - 提示文字：'Click to upload or drag and drop'\n   - 格式提示：'PNG, JPG — 512x512 recommended'（#999999）\n2. 实现点击选择文件功能（隐藏 input[type=file]）\n3. 实现拖拽上传功能（dragover/drop 事件处理）\n4. 文件格式验证：仅允许 PNG、JPG\n5. 使用 FileReader 实现上传后即时预览\n6. 上传成功后在 Header 的 AppIconHeader 区域同步显示预览图\n7. 拖拽悬停时的视觉反馈（边框高亮）",
+            "status": "pending",
+            "testStrategy": "1. 测试点击上传区域打开文件选择器\n2. 测试拖拽文件到上传区域\n3. 验证仅接受 PNG/JPG 格式\n4. 测试上传非法格式时的错误提示\n5. 验证上传后预览图正确显示\n6. 验证 Header 图标同步更新",
+            "parentId": "undefined"
+          },
+          {
+            "id": 4,
+            "title": "[PRD 2.3] 表单验证与条款同意 Checkbox 实现",
+            "description": "实现条款同意 Checkbox 组件、表单验证逻辑，控制 Create App 按钮的禁用/启用状态",
+            "dependencies": [
+              2
+            ],
+            "details": "1. Footer 区域结构：\n   - CheckboxRow：horizontal, gap:10\n   - Checkbox：16x16，未选中时 stroke:#E4E4E4 1.5px，选中时 fill:#E53935 + 白色勾号\n   - 文字：'I agree to the Developer Terms of Service and Developer Policy'（Inter 12, #777777）\n2. ButtonRow：horizontal, gap:12, justify:end\n   - CancelBtn：40 高，padding:0 24，stroke:#E4E4E4，文字 'Cancel'\n   - CreateBtn：40 高，padding:0 28，fill:#E53935，文字 'Create App →'（白色）\n3. 表单验证函数 validateForm()：\n   - App Name 非空检查\n   - 条款 Checkbox 勾选检查\n   - 两个条件均满足时启用 Create App 按钮\n4. Disabled 状态样式：bg:#E5393566, cursor:not-allowed\n5. 实时监听输入变化和 Checkbox 状态变化",
+            "status": "pending",
+            "testStrategy": "1. 验证 Checkbox 点击切换状态\n2. 测试 Checkbox 选中/未选中视觉样式\n3. 验证 App Name 为空时按钮禁用\n4. 验证未勾选条款时按钮禁用\n5. 测试两个条件都满足时按钮启用\n6. 测试 Cancel 按钮关闭模态框",
+            "parentId": "undefined"
+          },
+          {
+            "id": 5,
+            "title": "[PRD 2.3] 提交逻辑与 Bot Agent 创建接口调用",
+            "description": "实现 Create App 按钮点击后的提交逻辑，调用 POST /api/cses/bot-agent/config 接口创建 Bot Agent，成功后跳转到 APP 基本信息页",
+            "dependencies": [
+              2,
+              3,
+              4
+            ],
+            "details": "1. createApp() 异步函数实现：\n   - 生成 botUserId（可使用 UUID 或自定义 ID 生成器）\n   - 构建请求参数：\n     ```json\n     {\n       \"botUserId\": \"生成的ID\",\n       \"agentName\": \"App Name 输入值\",\n       \"description\": \"Description 输入值\",\n       \"webhookUrl\": \"\",\n       \"webhookSecret\": \"\",\n       \"triggerMode\": \"all\",\n       \"allowedChannelTypes\": [\"all\"],\n       \"enabled\": false\n     }\n     ```\n2. 调用 ApiService.request() 发送 POST 请求\n3. 按钮 Loading 状态处理（禁用按钮 + 显示加载动画）\n4. 成功处理：\n   - 关闭模态框\n   - 跳转到 app-basic-info.html?botUserId=${result.botUserId}\n5. 失败处理：\n   - 显示 Toast 错误提示\n   - 恢复按钮状态\n6. 图标上传处理（如有图标，可使用 Base64 编码或后续独立上传）",
+            "status": "pending",
+            "testStrategy": "1. 验证点击 Create App 按钮发送正确的 API 请求\n2. 验证请求参数格式正确\n3. 测试 Loading 状态下按钮不可重复点击\n4. 验证创建成功后正确跳转到 APP 基本信息页\n5. 测试 API 调用失败时的错误提示\n6. 验证 URL 参数 botUserId 正确传递",
+            "parentId": "undefined"
+          }
+        ],
+        "updatedAt": "2026-03-20T10:22:59.476Z"
+      },
+      {
+        "id": "7",
+        "title": "APP 基本信息页实现",
+        "description": "实现单个 APP 的详细配置页面，包含身份信息编辑、凭证展示、统计数据和侧边导航",
+        "details": "1. 页面布局 (app-basic-info.html):\n- Header：← APP 返回按钮 + DevPortal + Docs/Support\n- Sidebar (240px)：App Selector 下拉 + 导航菜单\n- Main Content：标题 + 统计栏 + 表单卡片\n\n2. App Selector:\n- 显示当前 App 图标和名称\n- 下拉切换不同 App（列出所有 App）\n- 切换时更新 URL 参数并重新加载数据\n\n3. Sidebar 导航菜单:\n```\nOVERVIEW\n├── Basic Info (激活)\n├── Install\n├── OAuth2\n├── Bot\n├── Emoji (NEW)\n├── Webhook (NEW)\n├── Rich Presence\n├── APP Testers\n└── APP Verification\nEXTENSIONS\n├── Games (badge)\n├── Mini Programs (→)\n└── Monetization (→)\n```\n\n4. Stats Bar (4 个指标):\n- Authorizations: 1,284\n- Subscriptions: 847\n- Installs: 3,106\n- App Status: ● Active\n\n5. Identity Section:\n- APP Icon 上传（含当前预览）\n- Name 输入框（带字符计数 X/32）\n- Description 多行文本框（带字符计数 X/400）\n- Tags 标签选择器\n  - 已选标签可删除（×）\n  - 可添加新标签\n  - 限制最多 5 个\n\n6. Credentials Section:\n- APP ID：只读显示 + Copy 按钮\n- Public Key：显示/隐藏切换\n\n7. app-basic-info.js 逻辑:\n- 从 URL 获取 botUserId 参数\n- 调用 BotAgentApi.get(botUserId) 加载数据\n- 表单修改后显示 Save Changes 按钮\n- 实现复制到剪贴板功能:\n```javascript\nfunction copyToClipboard(text) {\n  navigator.clipboard.writeText(text).then(() => {\n    Toast.success('已复制到剪贴板');\n  });\n}\n```",
+        "testStrategy": "1. 验证页面加载时正确获取 botUserId 参数\n2. 测试 API 数据加载和表单填充\n3. 验证 App Selector 下拉切换功能\n4. 测试侧边栏导航的激活状态和跳转\n5. 验证表单修改检测和保存功能\n6. 测试复制按钮的功能\n7. 验证标签添加/删除功能\n8. 对比设计稿验证布局准确性",
+        "priority": "high",
+        "dependencies": [
+          "2",
+          "3"
+        ],
+        "status": "done",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "[PRD 2.4 页面元素+Sidebar导航菜单] 页面布局与App Selector实现",
+            "description": "实现 APP 基本信息页的三栏布局结构（Header + Sidebar + Main Content），包含返回按钮、App Selector 下拉切换组件和完整的侧边栏导航菜单",
+            "dependencies": [],
+            "details": "1. 创建 app-basic-info.html 页面基础结构：\n   - Header Bar: fill_container x 48px，背景 #000000，space_between 布局，padding 0 24\n   - headerLeft: '←' 返回箭头 (Inter 14/500 #FFFFFF) + 'APP' 文字 (JetBrains Mono 14/600 #FFFFFF letterSpacing:1)\n   - headerRight: 'DevPortal' (JetBrains Mono 13/500 #FFFFFF99) + Docs/Support 按钮 (fill:#FFFFFF1A padding:5 10) + 用户头像 (32x32 #333333)\n\n2. Sidebar 结构 (240px 宽，背景 #000000，右边框 1px #333333)：\n   - App Selector: padding 12 20，包含 appIcon (24x24 fill:#E53935) + App名称 (#FFFFFF Inter 13/600) + 下拉箭头 '▾' (#777777)\n   - 分隔线: fill_container x 1, #333333\n\n3. Sidebar 导航菜单实现：\n   - NAVIGATION 标签 (JetBrains Mono 10/600 #777777 letterSpacing:1)\n   - 导航项列表：Basic Info(激活) / Install / OAuth / Bot / Emoji(NEW) / Webhook(NEW) / Rich Presence / APP Testers / APP Verification\n   - EXTENSIONS 标签 + Games(红色badge) / Mini Programs(→箭头) / Monetization(→箭头)\n   - 激活状态: fill:#1A1A1A, stroke left 2px #E53935, 文字 #FFFFFF\n   - 非激活状态: 文字 #777777, hover 时背景 #1A1A1A 文字 #CCCCCC\n   - NEW 标签: 红色小标签 bg:#E53935 文字 #FFFFFF padding 2 6 fontSize 10px\n\n4. App Selector 下拉功能实现：\n   - 点击显示下拉菜单，列出所有 App（调用 BotAgentApi.listEnabled()）\n   - 每项显示 App 图标 + 名称\n   - 切换时更新 URL 参数 (botUserId) 并重新加载数据\n   - 使用 setQueryParam() 工具函数更新 URL\n\n5. Main Content 容器：fill_container，背景 #FFFFFF，vertical 布局 gap 28，padding 32 40",
+            "status": "pending",
+            "testStrategy": "1. 验证三栏布局在 1440px 宽度下符合设计稿 ACfij.png\n2. 验证点击 '← APP' 返回按钮正确跳转到 app-list.html\n3. 测试 App Selector 下拉显示所有 App 列表\n4. 验证切换 App 后 URL 参数更新且页面数据刷新\n5. 验证 Sidebar 中 Basic Info 导航项为激活状态（左边框2px红色，背景 #1A1A1A）\n6. 测试 NEW 标签和 badge 正确显示\n7. 验证侧边栏导航点击可跳转到对应页面",
+            "parentId": "undefined"
+          },
+          {
+            "id": 2,
+            "title": "[PRD 2.4 Stats Bar] Stats Bar 统计指标栏实现",
+            "description": "实现 Stats Bar 统计指标栏，包含 4 个统计指标卡片（Authorizations、Subscriptions、Installs、App Status），每个指标含数值和标签，支持分隔线分割",
+            "dependencies": [
+              1
+            ],
+            "details": "1. Stats Bar 容器结构：\n   - 横向布局 display: flex，stroke:#E4E4E4 边框\n   - 4 个统计指标项，每项之间用 border-right 1px #E4E4E4 分隔（最后一项除外）\n\n2. 统计指标项结构（每项）：\n   ```html\n   <div class=\"stat-item\">\n     <div class=\"stat-value\">1,284</div>\n     <div class=\"stat-label\">AUTHORIZATIONS CHART</div>\n   </div>\n   ```\n   - padding: 16 20\n   - stat-value: Inter 20-24px/600 #000000，数字格式化（千分位逗号）\n   - stat-label: JetBrains Mono 10px/500 #777777 letterSpacing:0.5 text-transform:uppercase\n\n3. 4 个指标定义：\n   - Authorizations: 显示授权数，标签 'AUTHORIZATIONS CHART'\n   - Subscriptions: 显示订阅数，标签 'SUBSCRIPTIONS CHART'\n   - Installs: 显示安装数，标签 'INSTALLS TO DATE'\n   - App Status: 显示状态 '● Active'（红色圆点 #E53935 + 绿色文字），标签 'APP STATUS'\n\n4. CSS 样式：\n   ```css\n   .stats-bar { display: flex; border: 1px solid #E4E4E4; }\n   .stat-item { padding: 16px 20px; border-right: 1px solid #E4E4E4; }\n   .stat-item:last-child { border-right: none; }\n   .stat-value { font-size: 20px; font-weight: 600; color: #000000; }\n   .stat-label { font-family: 'JetBrains Mono'; font-size: 10px; color: #777777; text-transform: uppercase; letter-spacing: 0.5px; }\n   .status-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #22C55E; margin-right: 6px; }\n   ```\n\n5. 数据绑定：\n   - 从 API 返回数据中读取统计值（可能需要模拟数据或预留字段）\n   - App Status 根据 enabled 字段显示 Active/Inactive\n   - 数字使用 formatNumber() 工具函数格式化",
+            "status": "pending",
+            "testStrategy": "1. 验证 4 个统计指标正确显示且横向排列\n2. 验证每个指标之间有分隔线\n3. 测试数字格式化显示（如 1,284 带千分位逗号）\n4. 验证 App Status 指标的圆点颜色（Active 绿色/Inactive 红色）\n5. 测试数据从 API 加载后正确填充\n6. 对比设计稿 ACfij.png 验证 Stats Bar 样式",
+            "parentId": "undefined"
+          },
+          {
+            "id": 3,
+            "title": "[PRD 2.4 Identity Section] Identity 信息编辑区实现",
+            "description": "实现 Identity Section 区域，包含 APP Icon 上传预览、Name 输入框（带字符计数 X/32）、Description 多行文本框（带字符计数 X/400）、Tags 标签选择器（最多5个，可添加删除）",
+            "dependencies": [
+              1
+            ],
+            "details": "1. Identity Section 容器结构：\n   - Form Card 外层: 白色背景 #FFFFFF，边框 #E4E4E4\n   - Section Identity: vertical 布局 gap 20，padding 28 32\n   - Section 标签: 'IDENTITY' (JetBrains Mono 11/600 #777777 letterSpacing:1)\n\n2. APP Icon 上传区域：\n   - 当前图标预览: 56x56 显示当前 App 图标（或默认红色方块 + 首字母）\n   - 上传按钮/区域: 支持点击上传和拖拽\n   - 格式提示: 'PNG, JPG — 512x512 recommended' (#999999)\n   - 使用 FileReader 实现即时预览\n\n3. Name 输入框：\n   - 标签: 'Name' (Inter 12/500)\n   - 输入框: fill_container x 42 高度，边框 #E4E4E4，padding 0 14\n   - 字符计数: 显示 'X/32' 在输入框右侧或下方 (#999999)\n   - 最大长度限制: 32 字符\n   - 实时字符计数更新\n\n4. Description 多行文本框：\n   - 标签: 'Description' (Inter 12/500)\n   - 多行文本框: fill_container x 88-120 高度，边框 #E4E4E4，padding 10 14\n   - 字符计数: 显示 'X/400' (#999999)\n   - 最大长度限制: 400 字符\n   - resize: vertical 允许垂直调整大小\n\n5. Tags 标签选择器：\n   - 标签: 'Tags' (Inter 12/500)\n   - 已选标签显示: 横向排列，每个标签含文字 + × 删除按钮\n   - 标签样式: bg:#F3F4F6 文字 #374151 padding 4 10 gap 6\n   - 添加新标签: '+ add tag...' 按钮/输入框\n   - 限制最多 5 个标签\n   - 已选标签示例: productivity, automation, sdk\n   ```javascript\n   const tagsManager = {\n     tags: [],\n     maxTags: 5,\n     addTag(tag) {\n       if (this.tags.length < this.maxTags && !this.tags.includes(tag)) {\n         this.tags.push(tag);\n         this.render();\n       }\n     },\n     removeTag(tag) {\n       this.tags = this.tags.filter(t => t !== tag);\n       this.render();\n     }\n   };\n   ```\n\n6. 表单修改检测：\n   - 监听所有输入变化（input/change 事件）\n   - 与原始数据对比，检测是否有修改\n   - 有修改时显示 Save Changes 按钮",
+            "status": "pending",
+            "testStrategy": "1. 验证 APP Icon 上传后正确预览显示\n2. 测试 Name 输入框字符计数实时更新\n3. 验证 32 字符限制生效\n4. 测试 Description 字符计数和 400 字符限制\n5. 验证 Tags 标签显示和 × 删除功能\n6. 测试添加新标签功能\n7. 验证最多 5 个标签限制\n8. 测试表单修改后 Save Changes 按钮出现\n9. 对比设计稿验证 Identity Section 布局",
+            "parentId": "undefined"
+          },
+          {
+            "id": 4,
+            "title": "[PRD 2.4 Credentials Section] Credentials 凭证展示区实现",
+            "description": "实现 Credentials Section 区域，包含 APP ID 只读显示（带 Copy 复制按钮）和 Public Key 展示（支持显示/隐藏切换），实现复制到剪贴板功能",
+            "dependencies": [
+              1
+            ],
+            "details": "1. Credentials Section 容器结构：\n   - 与 Identity Section 之间用分隔线隔开 (fill_container x 1, #E4E4E4)\n   - Section Credentials: vertical 布局 gap 20，padding 28 32\n   - Section 标签: 'CREDENTIALS' (JetBrains Mono 11/600 #777777 letterSpacing:1)\n\n2. APP ID 字段：\n   - 标签: 'APP ID' (Inter 12/500)\n   - 显示区域: 只读文本框样式，背景 #F5F5F5，边框 #E4E4E4\n   - APP ID 值: JetBrains Mono 13px 显示（如 'bot_7f3a9b2e...'）\n   - Copy 按钮: 右侧显示复制图标按钮 (lucide copy icon)\n   - 复制功能实现:\n     ```javascript\n     async function copyAppId() {\n       const appId = document.getElementById('appId').value;\n       await copyToClipboard(appId);\n       Toast.success('已复制到剪贴板');\n     }\n     ```\n\n3. Public Key 字段：\n   - 标签: 'Public Key' (Inter 12/500)\n   - 显示区域: 只读文本框样式，支持多行\n   - 默认隐藏: 显示 '••••••••••••••••' 掩码\n   - 显示/隐藏切换按钮: 眼睛图标 (lucide eye / eye-off)\n   - 切换逻辑:\n     ```javascript\n     let publicKeyVisible = false;\n     function togglePublicKey() {\n       publicKeyVisible = !publicKeyVisible;\n       const field = document.getElementById('publicKey');\n       const icon = document.getElementById('toggleIcon');\n       if (publicKeyVisible) {\n         field.type = 'text';\n         icon.setAttribute('data-lucide', 'eye-off');\n       } else {\n         field.type = 'password';\n         icon.setAttribute('data-lucide', 'eye');\n       }\n       lucide.createIcons();\n     }\n     ```\n   - Copy 按钮: 同样支持复制 Public Key\n\n4. 复制按钮样式：\n   - 小型按钮: padding 6 10，边框 #E4E4E4\n   - hover 时背景 #F5F5F5\n   - 复制成功后短暂显示勾号图标反馈\n\n5. 字段布局：\n   - 两个字段可横向排列 (horizontal gap 20) 或垂直排列\n   - APP ID 字段宽度约 50%，Public Key 字段宽度约 50%",
+            "status": "pending",
+            "testStrategy": "1. 验证 APP ID 正确显示且为只读状态\n2. 测试 Copy 按钮点击后复制到剪贴板\n3. 验证复制成功后 Toast 提示显示\n4. 测试 Public Key 默认隐藏为掩码\n5. 验证点击眼睛图标切换显示/隐藏\n6. 测试 Public Key 也支持复制功能\n7. 验证 Credentials Section 与 Identity Section 之间有分隔线\n8. 对比设计稿验证凭证区域布局",
+            "parentId": "undefined"
+          },
+          {
+            "id": 5,
+            "title": "[PRD 2.4 关联接口+交互说明] 数据加载与保存逻辑实现",
+            "description": "实现 app-basic-info.js 中的完整数据加载逻辑，包括从 URL 获取 botUserId 参数、调用 BotAgentApi.get() 加载数据、表单数据填充、修改检测、Save Changes 保存功能",
+            "dependencies": [
+              2,
+              3,
+              4
+            ],
+            "details": "1. 页面初始化逻辑 (app-basic-info.js)：\n   ```javascript\n   const BasicInfoPage = {\n     botUserId: null,\n     originalData: null,\n     hasChanges: false,\n\n     async init() {\n       this.botUserId = getQueryParams().botUserId;\n       if (!this.botUserId) {\n         Toast.error('缺少应用ID参数');\n         window.location.href = 'app-list.html';\n         return;\n       }\n       await this.loadData();\n       this.bindEvents();\n     },\n\n     async loadData() {\n       this.showLoading();\n       try {\n         const data = await BotAgentApi.get(this.botUserId);\n         this.originalData = { ...data };\n         this.fillForm(data);\n       } catch (error) {\n         Toast.error('加载数据失败');\n       } finally {\n         this.hideLoading();\n       }\n     }\n   };\n   ```\n\n2. 表单数据填充：\n   ```javascript\n   fillForm(data) {\n     document.getElementById('appName').value = data.agentName || '';\n     document.getElementById('appDesc').value = data.description || '';\n     document.getElementById('appId').value = data.botUserId || '';\n     document.getElementById('publicKey').value = data.publicKey || '';\n     this.renderTags(data.tags || []);\n     this.updateCharCounts();\n     // 更新 App Selector 显示当前 App\n     this.updateAppSelector(data);\n     // 更新 Stats Bar 数据\n     this.updateStatsBar(data.stats);\n   }\n   ```\n\n3. 表单修改检测与 Save Changes 按钮：\n   ```javascript\n   checkForChanges() {\n     const current = this.getFormData();\n     this.hasChanges = JSON.stringify(current) !== JSON.stringify(this.originalData);\n     const saveBtn = document.getElementById('saveBtn');\n     saveBtn.style.display = this.hasChanges ? 'flex' : 'none';\n   }\n   ```\n\n4. 保存配置功能：\n   ```javascript\n   async saveChanges() {\n     if (!this.hasChanges) return;\n     this.setSaveLoading(true);\n     try {\n       const formData = this.getFormData();\n       await BotAgentApi.create({ botUserId: this.botUserId, ...formData });\n       Toast.success('保存成功');\n       this.originalData = { ...formData };\n       this.hasChanges = false;\n       document.getElementById('saveBtn').style.display = 'none';\n     } catch (error) {\n       Toast.error('保存失败: ' + error.message);\n     } finally {\n       this.setSaveLoading(false);\n     }\n   }\n   ```\n\n5. 事件绑定：\n   - 所有输入框的 input 事件 → 更新字符计数 + 检测修改\n   - 返回按钮点击 → 跳转到 app-list.html\n   - 侧边栏导航点击 → 跳转到对应页面\n   - Save Changes 按钮点击 → 调用保存接口\n   - App Selector 下拉切换 → 更新 URL 并重新加载\n\n6. Loading 状态处理：\n   - 页面加载时显示 Loading 遮罩或骨架屏\n   - Save 按钮点击时显示 Loading 状态\n   - 防止重复提交",
+            "status": "pending",
+            "testStrategy": "1. 验证页面加载时正确获取 URL 中的 botUserId 参数\n2. 测试无 botUserId 参数时跳转到 app-list.html\n3. 验证 API 数据加载后正确填充表单\n4. 测试 App Selector 显示当前 App 信息\n5. 验证修改任意字段后 Save Changes 按钮出现\n6. 测试 Save Changes 点击后正确调用 POST /api/cses/bot-agent/config\n7. 验证保存成功后 Toast 提示和按钮隐藏\n8. 测试保存失败时的错误提示\n9. 验证 Loading 状态正确显示和隐藏\n10. 测试 App Selector 切换功能和 URL 更新",
+            "parentId": "undefined"
+          }
+        ],
+        "updatedAt": "2026-03-20T10:21:28.597Z"
+      },
+      {
+        "id": "8",
+        "title": "APP Webhook 配置页实现",
+        "description": "实现 Webhook 端点配置、连接测试和事件订阅功能",
+        "details": "1. 页面布局 (app-webhook.html):\n- 复用 APP 详情页的 Header 和 Sidebar 结构\n- Sidebar 中 Webhook 项激活\n- Main Content 包含多个配置卡片\n\n2. Bot 状态卡片:\n- 浅红色背景 #FFF5F5\n- Bot 图标 (48x48) + 连接状态文字\n- Bot User ID 显示\n- 状态标签：● Active (绿色)\n\n3. Webhook Endpoint 配置卡片:\n- Target URL 输入框\n  - placeholder: https://your-server.com/webhook/callback\n  - 验证：必须是 HTTPS URL\n  - 提示文字：\"Must be a publicly accessible HTTPS endpoint\"\n- Webhook Secret 输入框\n  - 密码模式（可切换显示）\n  - 提示：\"Used to verify webhook payload signatures (HMAC-SHA256)\"\n- Trigger Mode 下拉选择\n  - All Messages / Direct / Mention\n  - 提示：\"'mention' = only @bot messages, 'all' = every message\"\n- Save Changes 按钮（右上角）\n\n4. Connection Test 卡片:\n- Send Test Webhook 按钮\n- 测试结果显示区:\n  - 成功：绿色背景 #ECFDF5，显示 \"Success — 200 OK (XXms)\" + 时间戳\n  - 失败：红色背景，显示错误信息\n- Test Message 输入框（自定义测试消息）\n\n5. Event Subscriptions 卡片:\n- 标题 + Enable 标签 + Toggle 开关\n- 三列事件复选框:\n  - APP Events: APP Authorized / APP Deauthorized\n  - Messages: Message New / Message Mention\n  - Authorization: Auth Created / Auth Updated / Auth Deleted\n\n6. app-webhook.js 逻辑:\n```javascript\nasync function sendTestWebhook() {\n  const testMessage = document.getElementById('testMessage').value;\n  try {\n    setLoading(true);\n    const result = await BotAgentApi.testWebhook(botUserId, testMessage);\n    showTestResult(true, result);\n  } catch (error) {\n    showTestResult(false, error);\n  } finally {\n    setLoading(false);\n  }\n}\n\nasync function saveWebhookConfig() {\n  const config = {\n    webhookUrl: document.getElementById('targetUrl').value,\n    webhookSecret: document.getElementById('webhookSecret').value,\n    triggerMode: document.getElementById('triggerMode').value,\n    eventSubscriptions: getSelectedEvents()\n  };\n  await BotAgentApi.updateConfig(botUserId, config);\n  Toast.success('配置已保存');\n}\n```",
+        "testStrategy": "1. 验证页面加载时正确显示当前 Webhook 配置\n2. 测试 URL 格式验证（HTTPS 要求）\n3. 测试 Webhook Secret 的显示/隐藏切换\n4. 验证 Trigger Mode 下拉选择功能\n5. 测试 Send Test Webhook 功能和结果展示\n6. 验证 Event Subscriptions Toggle 开关状态\n7. 测试事件复选框的选择和保存\n8. 验证 Save Changes 按钮的启用/禁用逻辑",
+        "priority": "high",
+        "dependencies": [
+          "2",
+          "3",
+          "7"
+        ],
+        "status": "done",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "[PRD 2.5.1] Bot 状态卡片组件实现",
+            "description": "实现 Bot 连接状态展示卡片，包含 Bot 图标、连接状态文本、Bot User ID 显示和状态标签（Active/Inactive）",
+            "dependencies": [],
+            "details": "1. 创建 Bot 状态卡片结构 (botStatusCard)\n- 浅红色背景 #FFF5F5，灰色边框 #E4E4E4\n- 内边距 20px，gap 20px，水平布局\n\n2. 实现 Bot 图标组件\n- 48x48 红色方块 (#E53935)，白色首字母\n\n3. 实现信息展示区\n- 主标题: \"Bot Connected → {AgentName}\" (Inter 14/600)\n- 副标题: \"Bot User ID: {botUserId}\" (#777777)\n\n4. 实现状态标签\n- Active 状态: 绿色圆点 + \"Active\" 文字\n- Inactive 状态: 灰色圆点 + 对应文字\n\n5. 页面加载时调用 GET /api/cses/bot-agent/config/{botUserId} 获取 Bot 配置信息并渲染状态",
+            "status": "pending",
+            "testStrategy": "1. 验证页面加载时正确显示 Bot 状态信息\n2. 测试 Active/Inactive 状态标签正确渲染\n3. 验证 Bot User ID 正确显示\n4. 测试 API 调用失败时的降级展示",
+            "parentId": "undefined"
+          },
+          {
+            "id": 2,
+            "title": "[PRD 2.5.2] Webhook Endpoint 配置区实现",
+            "description": "实现 Webhook 端点配置表单，包含 Target URL、Webhook Secret、Trigger Mode 三个配置项及其验证逻辑",
+            "dependencies": [
+              1
+            ],
+            "details": "1. 创建配置卡片容器 (configCard)\n- 白色背景，灰色边框 #E4E4E4\n- 内边距 28px，垂直布局，gap 24px\n\n2. 实现卡片标题区\n- 红色圆点 (8x8, #E53935) + \"Webhook Endpoint\" (Inter 16/600)\n- 描述文本 (Inter 13, #6B7280)\n\n3. Target URL 输入框\n- placeholder: https://your-server.com/webhook/callback\n- 实现 HTTPS URL 格式验证（正则: ^https://）\n- 提示文字: \"Must be a publicly accessible HTTPS endpoint\"\n\n4. Webhook Secret 输入框\n- 密码模式 (type=\"password\")\n- 添加显示/隐藏切换按钮（眼睛图标）\n- 提示: \"Used to verify webhook payload signatures (HMAC-SHA256)\"\n\n5. Trigger Mode 下拉选择器\n- 选项: All Messages / Direct / Mention\n- 提示: \"'mention' = only @bot messages, 'all' = every message\"\n\n6. Save Changes 按钮\n- 红色填充 #E53935，padding 10px 24px\n- 保存图标 + \"Save Changes\" 文字\n- 表单变更时启用，未变更时禁用",
+            "status": "pending",
+            "testStrategy": "1. 测试 URL 格式验证（HTTPS 要求）\n2. 测试 Webhook Secret 的显示/隐藏切换\n3. 验证 Trigger Mode 下拉选择功能\n4. 测试表单变更检测和 Save 按钮启用/禁用逻辑\n5. 验证必填字段标记（* 标记）",
+            "parentId": "undefined"
+          },
+          {
+            "id": 3,
+            "title": "[PRD 2.5.3] Connection Test 连接测试区实现",
+            "description": "实现 Webhook 连接测试功能区，包含发送测试按钮、测试结果展示和自定义测试消息输入",
+            "dependencies": [
+              1,
+              2
+            ],
+            "details": "1. 创建测试卡片容器 (testCard)\n- 白色背景，灰色边框 #E4E4E4\n- 内边距 28px，垂直布局，gap 20px\n\n2. 实现卡片标题区\n- 红色圆点 + \"Connection Test\" (Inter 16/600)\n- 右侧: \"Send Test Webhook\" 描边按钮（stroke:#E4E4E4）\n\n3. 测试结果展示区\n- 成功状态: 绿色背景 #ECFDF5，绿色边框 #A7F3D0\n  - ✓ 图标 + \"Last test: Success — 200 OK (XXms)\" + 时间戳\n- 失败状态: 红色背景 #FEF2F2，红色边框\n  - ✗ 图标 + 错误信息 + 时间戳\n- 无测试记录: 灰色提示文字\n\n4. Test Message 输入框\n- 标签: \"Test Message:\"\n- placeholder: \"Hello from webhook test!\"\n- 允许用户自定义测试消息内容\n\n5. 实现 sendTestWebhook() 函数\n- 调用测试接口（可能需要与后端协调）\n- Loading 状态处理（按钮禁用+加载动画）\n- 显示响应时间（毫秒）和时间戳",
+            "status": "pending",
+            "testStrategy": "1. 测试 Send Test Webhook 按钮点击\n2. 验证成功结果展示（绿色背景，响应时间）\n3. 验证失败结果展示（红色背景，错误信息）\n4. 测试 Loading 状态显示\n5. 验证自定义测试消息输入\n6. 测试连续多次测试的结果更新",
+            "parentId": "undefined"
+          },
+          {
+            "id": 4,
+            "title": "[PRD 2.5.4] Event Subscriptions 事件订阅区实现",
+            "description": "实现事件订阅配置区，包含主开关、三列事件复选框（APP Events、Messages、Authorization）",
+            "dependencies": [
+              1
+            ],
+            "details": "1. 创建事件订阅卡片容器 (eventsCard)\n- 白色背景，灰色边框 #E4E4E4\n- 内边距 28px，垂直布局，gap 20px\n\n2. 实现卡片标题区\n- 红色圆点 + \"Event Subscriptions\" + \"Enable\" 标签（绿色小标签）\n- 右侧: Toggle 开关组件\n  - On: 背景 #E53935，圆点在右\n  - Off: 背景 #E4E4E4，圆点在左\n\n3. 实现三列事件网格布局 (eventsGrid)\n- horizontal，gap 16px，每列 fill_container\n\n4. APP Events 列\n- 标题图标 + \"APP Events\"\n- Checkbox: APP Authorized (app.authorized)\n- Checkbox: APP Deauthorized (app.deauthorized)\n\n5. Messages 列\n- 标题图标 + \"Messages\"\n- Checkbox: Message New (message.new)\n- Checkbox: Message Mention (message.mention)\n\n6. Authorization 列\n- 标题图标 + \"Authorization\"\n- Checkbox: Auth Created (auth.create)\n- Checkbox: Auth Updated (auth.update)\n- Checkbox: Auth Deleted (auth.delete)\n\n7. 实现 getSelectedEvents() 函数\n- 收集所有选中的事件类型\n- 返回事件数组用于保存配置",
+            "status": "pending",
+            "testStrategy": "1. 验证 Event Subscriptions Toggle 开关状态\n2. 测试事件复选框的选择功能\n3. 验证 Toggle 关闭时复选框禁用\n4. 测试 getSelectedEvents() 返回正确的事件数组\n5. 验证事件计数标签（6 events）更新",
+            "parentId": "undefined"
+          },
+          {
+            "id": 5,
+            "title": "[PRD 2.5] 保存逻辑与接口调用集成",
+            "description": "实现页面数据加载、配置保存和 API 接口集成，包含 BotAgentApi 封装和 Toast 通知",
+            "dependencies": [
+              1,
+              2,
+              3,
+              4
+            ],
+            "details": "1. 创建 app-webhook.js 主模块\n- 从 URL 参数获取 botUserId\n- 页面初始化时加载现有配置\n\n2. 实现页面数据加载\n- 调用 GET /api/cses/bot-agent/config/{botUserId}\n- 填充表单字段（targetUrl, webhookSecret, triggerMode）\n- 渲染事件订阅复选框状态\n\n3. 实现 saveWebhookConfig() 函数\n```javascript\nasync function saveWebhookConfig() {\n  const config = {\n    webhookUrl: document.getElementById('targetUrl').value,\n    webhookSecret: document.getElementById('webhookSecret').value,\n    triggerMode: document.getElementById('triggerMode').value,\n    eventSubscriptions: getSelectedEvents()\n  };\n  await BotAgentApi.updateConfig(botUserId, config);\n  Toast.success('配置已保存');\n}\n```\n\n4. 实现表单变更检测\n- 监听所有输入字段的 change/input 事件\n- 对比原始值和当前值\n- 有变更时启用 Save Changes 按钮\n\n5. 实现 BotAgentApi 封装\n- getConfig(botUserId): GET 请求\n- updateConfig(botUserId, config): POST 请求\n- testWebhook(botUserId, message): 测试连接\n\n6. 错误处理与 Toast 通知\n- 成功: Toast.success('配置已保存')\n- 失败: Toast.error(错误信息)",
+            "status": "pending",
+            "testStrategy": "1. 验证页面加载时正确显示当前 Webhook 配置\n2. 测试 Save Changes 按钮的启用/禁用逻辑\n3. 验证配置保存成功后的 Toast 通知\n4. 测试 API 调用失败时的错误处理\n5. 验证表单验证错误时阻止提交\n6. 测试页面刷新后配置持久化",
+            "parentId": "undefined"
+          }
+        ],
+        "updatedAt": "2026-03-20T10:22:59.478Z"
+      },
+      {
+        "id": "9",
+        "title": "工具函数与辅助模块",
+        "description": "实现通用工具函数：日期格式化、数字格式化、防抖节流、URL 参数处理、本地存储封装等",
+        "details": "1. utils.js 模块:\n\n```javascript\n// 数字格式化（如 1200 → 1.2k）\nfunction formatNumber(num) {\n  if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';\n  if (num >= 1000) return (num / 1000).toFixed(1) + 'k';\n  return num.toString();\n}\n\n// 相对时间（如 2h ago, 1d ago）\nfunction formatRelativeTime(timestamp) {\n  const diff = Date.now() - new Date(timestamp).getTime();\n  const hours = Math.floor(diff / (1000 * 60 * 60));\n  if (hours < 24) return `${hours}h ago`;\n  const days = Math.floor(hours / 24);\n  return `${days}d ago`;\n}\n\n// 防抖函数\nfunction debounce(fn, delay = 300) {\n  let timer;\n  return function(...args) {\n    clearTimeout(timer);\n    timer = setTimeout(() => fn.apply(this, args), delay);\n  };\n}\n\n// URL 参数处理\nfunction getQueryParams() {\n  return Object.fromEntries(new URLSearchParams(location.search));\n}\n\nfunction setQueryParam(key, value) {\n  const url = new URL(location.href);\n  url.searchParams.set(key, value);\n  history.replaceState({}, '', url);\n}\n\n// LocalStorage 封装\nconst Storage = {\n  get(key, defaultValue = null) {\n    const item = localStorage.getItem(key);\n    return item ? JSON.parse(item) : defaultValue;\n  },\n  set(key, value) {\n    localStorage.setItem(key, JSON.stringify(value));\n  },\n  remove(key) {\n    localStorage.removeItem(key);\n  }\n};\n\n// 生成唯一 ID\nfunction generateId(prefix = '') {\n  return prefix + Math.random().toString(36).substr(2, 9);\n}\n\n// 复制到剪贴板\nasync function copyToClipboard(text) {\n  try {\n    await navigator.clipboard.writeText(text);\n    return true;\n  } catch {\n    // 降级方案\n    const textarea = document.createElement('textarea');\n    textarea.value = text;\n    document.body.appendChild(textarea);\n    textarea.select();\n    document.execCommand('copy');\n    document.body.removeChild(textarea);\n    return true;\n  }\n}\n\n// 表单序列化\nfunction serializeForm(form) {\n  const formData = new FormData(form);\n  return Object.fromEntries(formData.entries());\n}\n```\n\n2. 导出为全局 Utils 对象或 ES6 模块",
+        "testStrategy": "1. 编写单元测试覆盖所有工具函数\n2. 测试数字格式化的边界情况（0, 999, 1000, 1000000）\n3. 测试相对时间在不同时间跨度的显示\n4. 验证防抖函数的正确延迟执行\n5. 测试 URL 参数的读取和设置\n6. 验证 LocalStorage 的存取和类型保持\n7. 测试复制到剪贴板在不支持 Clipboard API 的浏览器中的降级",
+        "priority": "medium",
+        "dependencies": [
+          "1"
+        ],
+        "status": "done",
+        "subtasks": [],
+        "updatedAt": "2026-03-20T10:15:40.875Z"
+      },
+      {
+        "id": "10",
+        "title": "响应式布局与适配",
+        "description": "实现页面在不同屏幕尺寸下的响应式适配，包括 Sidebar 折叠、网格布局调整等",
+        "details": "1. 断点定义:\n```css\n/* 大屏 (默认) */\n@media (min-width: 1440px) {\n  .container { max-width: 1440px; }\n}\n\n/* 中大屏 */\n@media (max-width: 1439px) and (min-width: 1200px) {\n  .sidebar { width: 180px; }\n  .app-grid { grid-template-columns: repeat(3, 1fr); }\n}\n\n/* 中屏 */\n@media (max-width: 1199px) and (min-width: 992px) {\n  .sidebar { width: 60px; }\n  .sidebar .nav-text { display: none; }\n  .sidebar .nav-icon { display: block; }\n  .app-grid { grid-template-columns: repeat(2, 1fr); }\n}\n\n/* 小屏 */\n@media (max-width: 991px) {\n  .sidebar { \n    position: fixed;\n    left: -240px;\n    transition: left 0.3s;\n  }\n  .sidebar.open { left: 0; }\n  .hamburger { display: block; }\n  .app-grid { grid-template-columns: 1fr; }\n}\n```\n\n2. Sidebar 折叠模式:\n- 收窄为图标模式（60px）\n- 只显示图标，hover 显示 tooltip\n- 移动端完全隐藏，通过汉堡菜单打开\n\n3. 卡片网格响应式:\n- 1440px+: 3 列\n- 1200-1439px: 3 列（卡片略窄）\n- 992-1199px: 2 列\n- <992px: 单列\n\n4. Header 响应式:\n- 小屏隐藏部分文字，只保留图标\n- 添加汉堡菜单按钮\n\n5. 表单响应式:\n- 两列布局在小屏改为单列\n- 输入框宽度自适应\n\n6. JavaScript 辅助:\n```javascript\n// 监听窗口变化\nwindow.addEventListener('resize', debounce(() => {\n  updateLayout();\n}, 200));\n\nfunction updateLayout() {\n  const width = window.innerWidth;\n  document.body.classList.toggle('mobile', width < 992);\n  document.body.classList.toggle('tablet', width >= 992 && width < 1200);\n}\n```",
+        "testStrategy": "1. 使用 Chrome DevTools 在各断点尺寸下测试\n2. 验证 Sidebar 折叠/展开的动画流畅性\n3. 测试汉堡菜单在移动端的打开/关闭\n4. 验证卡片网格在各尺寸下的列数变化\n5. 测试表单布局的响应式调整\n6. 使用真实移动设备测试触摸交互\n7. 验证横屏/竖屏切换时的布局正确性",
+        "priority": "medium",
+        "dependencies": [
+          "4",
+          "5",
+          "7",
+          "8"
+        ],
+        "status": "done",
+        "subtasks": [],
+        "updatedAt": "2026-03-20T10:22:59.481Z"
+      },
+      {
+        "id": "11",
+        "title": "交互状态与动效实现",
+        "description": "实现所有交互状态（hover、focus、active、disabled）和过渡动画效果",
+        "details": "1. 侧边栏导航状态:\n```css\n.nav-item {\n  color: #777777;\n  transition: all 0.2s;\n}\n.nav-item:hover {\n  color: #CCCCCC;\n  background: #1A1A1A;\n}\n.nav-item.active {\n  color: #FFFFFF;\n  background: #1A1A1A;\n  border-left: 2px solid #E53935;\n}\n```\n\n2. 按钮状态:\n```css\n.btn-primary {\n  background: #E53935;\n  transition: background 0.2s, transform 0.1s;\n}\n.btn-primary:hover {\n  background: #D32F2F;\n}\n.btn-primary:active {\n  transform: scale(0.98);\n}\n.btn-primary:disabled {\n  background: rgba(229, 57, 53, 0.5);\n  cursor: not-allowed;\n}\n```\n\n3. 卡片 hover 效果:\n```css\n.app-card {\n  transition: box-shadow 0.2s, transform 0.2s;\n}\n.app-card:hover {\n  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);\n  transform: translateY(-2px);\n}\n```\n\n4. 输入框 focus 状态:\n```css\n.input:focus {\n  border-color: #E53935;\n  box-shadow: 0 0 0 2px rgba(229, 57, 53, 0.15);\n  outline: none;\n}\n```\n\n5. Modal 动画:\n```css\n.modal-overlay {\n  opacity: 0;\n  animation: fadeIn 0.2s forwards;\n}\n.modal {\n  transform: translateY(20px);\n  animation: slideUp 0.3s forwards;\n}\n@keyframes fadeIn {\n  to { opacity: 1; }\n}\n@keyframes slideUp {\n  to { transform: translateY(0); }\n}\n```\n\n6. Toggle 开关动画:\n```css\n.toggle {\n  transition: background 0.2s;\n}\n.toggle-knob {\n  transition: transform 0.2s;\n}\n.toggle.on .toggle-knob {\n  transform: translateX(20px);\n}\n```\n\n7. Loading 状态:\n```css\n.btn.loading {\n  position: relative;\n  color: transparent;\n}\n.btn.loading::after {\n  content: '';\n  position: absolute;\n  width: 16px;\n  height: 16px;\n  border: 2px solid #fff;\n  border-top-color: transparent;\n  border-radius: 50%;\n  animation: spin 0.8s linear infinite;\n}\n```\n\n8. Toast 通知动画:\n```css\n.toast {\n  animation: slideInRight 0.3s, fadeOut 0.3s 2.7s;\n}\n```",
+        "testStrategy": "1. 验证所有 hover 状态的视觉反馈\n2. 测试 focus 状态的键盘可访问性\n3. 验证 disabled 状态下的交互禁用\n4. 测试 Modal 打开/关闭动画流畅度\n5. 验证 Loading 状态的动画效果\n6. 测试 Toast 通知的进入/退出动画\n7. 使用 60fps 标准检测动画性能",
+        "priority": "medium",
+        "dependencies": [
+          "3",
+          "10"
+        ],
+        "status": "done",
+        "subtasks": [],
+        "updatedAt": "2026-03-20T10:22:59.483Z"
+      },
+      {
+        "id": "12",
+        "title": "错误处理与边界情况",
+        "description": "实现全面的错误处理、空状态展示、加载状态和网络异常处理",
+        "details": "1. API 错误处理:\n```javascript\n// 全局错误处理\nwindow.addEventListener('unhandledrejection', (event) => {\n  console.error('Unhandled promise rejection:', event.reason);\n  Toast.error('操作失败，请稍后重试');\n});\n\n// HTTP 状态码处理\nfunction handleHttpError(status, message) {\n  switch (status) {\n    case 401:\n      Toast.error('登录已过期，请重新登录');\n      redirectToLogin();\n      break;\n    case 403:\n      Toast.error('无权限执行此操作');\n      break;\n    case 404:\n      Toast.error('请求的资源不存在');\n      break;\n    case 500:\n      Toast.error('服务器错误，请稍后重试');\n      break;\n    default:\n      Toast.error(message || '请求失败');\n  }\n}\n```\n\n2. 空状态展示:\n```html\n<div class=\"empty-state\">\n  <div class=\"empty-icon\">📭</div>\n  <h3>暂无应用</h3>\n  <p>点击 \"+ New APP\" 创建你的第一个应用</p>\n  <button class=\"btn-primary\">+ 创建应用</button>\n</div>\n```\n\n3. Loading 状态:\n```html\n<div class=\"loading-skeleton\">\n  <div class=\"skeleton-card\"></div>\n  <div class=\"skeleton-card\"></div>\n  <div class=\"skeleton-card\"></div>\n</div>\n```\n\n4. 网络异常处理:\n```javascript\nwindow.addEventListener('online', () => {\n  Toast.success('网络已恢复');\n  refreshCurrentPage();\n});\n\nwindow.addEventListener('offline', () => {\n  Toast.error('网络连接已断开');\n});\n```\n\n5. 表单验证错误:\n```javascript\nfunction showFieldError(fieldId, message) {\n  const field = document.getElementById(fieldId);\n  field.classList.add('error');\n  \n  let errorEl = field.parentElement.querySelector('.error-message');\n  if (!errorEl) {\n    errorEl = document.createElement('span');\n    errorEl.className = 'error-message';\n    field.parentElement.appendChild(errorEl);\n  }\n  errorEl.textContent = message;\n}\n```\n\n6. 确认对话框:\n```javascript\nfunction confirmDialog(message, onConfirm) {\n  const dialog = document.createElement('div');\n  dialog.innerHTML = `\n    <div class=\"confirm-dialog\">\n      <p>${message}</p>\n      <div class=\"dialog-actions\">\n        <button class=\"btn-secondary\" onclick=\"this.closest('.modal-overlay').remove()\">取消</button>\n        <button class=\"btn-danger\" id=\"confirmBtn\">确认删除</button>\n      </div>\n    </div>\n  `;\n  document.body.appendChild(dialog);\n  dialog.querySelector('#confirmBtn').onclick = () => {\n    dialog.remove();\n    onConfirm();\n  };\n}\n```\n\n7. 请求超时处理:\n```javascript\nconst controller = new AbortController();\nconst timeout = setTimeout(() => controller.abort(), 30000);\n\nfetch(url, { signal: controller.signal })\n  .catch(err => {\n    if (err.name === 'AbortError') {\n      Toast.error('请求超时，请检查网络');\n    }\n  })\n  .finally(() => clearTimeout(timeout));\n```",
+        "testStrategy": "1. 模拟各种 HTTP 错误状态码，验证错误提示\n2. 测试网络断开/恢复时的提示和自动恢复\n3. 验证空列表状态的展示和引导按钮\n4. 测试 Loading 骨架屏的显示\n5. 验证表单验证错误的显示和清除\n6. 测试确认对话框的取消和确认功能\n7. 模拟请求超时，验证超时提示\n8. 测试 Token 过期时的自动跳转登录",
+        "priority": "medium",
+        "dependencies": [
+          "2",
+          "4",
+          "5",
+          "6",
+          "7",
+          "8"
+        ],
+        "status": "done",
+        "subtasks": [],
+        "updatedAt": "2026-03-20T10:22:59.486Z"
+      }
+    ],
+    "metadata": {
+      "version": "1.0.0",
+      "lastModified": "2026-03-20T10:22:59.486Z",
+      "taskCount": 12,
+      "completedCount": 12,
+      "tags": [
+        "master"
+      ]
+    }
+  }
+}
