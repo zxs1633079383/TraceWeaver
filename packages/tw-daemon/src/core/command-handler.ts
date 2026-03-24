@@ -282,6 +282,74 @@ export class CommandHandler {
     return { ok: true, data: limited }
   }
 
+  async cascadeUpdate(params: {
+    id: string
+    attributes: Record<string, unknown>
+    cascade: boolean
+  }): Promise<{ ok: boolean; data?: { id: string; updated_count: number }; error?: { code: string; message: string } }> {
+    const entity = this.registry.get(params.id)
+    if (!entity) {
+      return { ok: false, error: { code: 'ENTITY_NOT_FOUND', message: `Entity ${params.id} not found` } }
+    }
+
+    await this.updateAttributes({ id: params.id, attributes: params.attributes })
+    let updatedCount = 1
+
+    if (params.cascade) {
+      const descendants = this.dag.getTransitiveDependents(params.id)
+      for (const descendantId of descendants) {
+        const desc = this.registry.get(descendantId)
+        if (!desc) continue
+        this.opts.spanManager?.addEvent(descendantId, 'upstream_updated', {
+          source: params.id,
+          changed: Object.keys(params.attributes),
+        })
+        this.emit({
+          id: randomUUID(),
+          type: 'entity.upstream_changed',
+          entity_id: descendantId,
+          ts: new Date().toISOString(),
+          attributes: { source: params.id, changed: Object.keys(params.attributes) },
+        })
+        updatedCount++
+      }
+    }
+
+    return { ok: true, data: { id: params.id, updated_count: updatedCount } }
+  }
+
+  async remediationNext(queueDir: string): Promise<Record<string, unknown> | null> {
+    const { readdir, readFile, rename, mkdir } = await import('node:fs/promises')
+    const pendingDir = join(queueDir, 'pending')
+    const inProgressDir = join(queueDir, 'in-progress')
+    await mkdir(pendingDir, { recursive: true })
+    await mkdir(inProgressDir, { recursive: true })
+    let files: string[]
+    try { files = await readdir(pendingDir) } catch { return null }
+    const jsonFiles = files.filter(f => f.endsWith('.json')).sort()
+    if (jsonFiles.length === 0) return null
+    const file = jsonFiles[0]
+    const src = join(pendingDir, file)
+    const dst = join(inProgressDir, file)
+    const raw = await readFile(src, 'utf8')
+    const item = JSON.parse(raw) as Record<string, unknown>
+    await rename(src, dst)
+    return item
+  }
+
+  async remediationDone(params: { remId: string; queueDir: string }): Promise<{ ok: boolean }> {
+    const { readdir, rename, mkdir } = await import('node:fs/promises')
+    const inProgressDir = join(params.queueDir, 'in-progress')
+    const doneDir = join(params.queueDir, 'done')
+    await mkdir(doneDir, { recursive: true })
+    let files: string[]
+    try { files = await readdir(inProgressDir) } catch { return { ok: false } }
+    const target = files.find(f => f.includes(params.remId))
+    if (!target) return { ok: false }
+    await rename(join(inProgressDir, target), join(doneDir, target))
+    return { ok: true }
+  }
+
   getAllEntities(): Entity[] {
     return this.registry.getAll()
   }
