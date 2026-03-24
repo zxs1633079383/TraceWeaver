@@ -2,7 +2,7 @@
   "name": "@traceweaver/daemon",
   "version": "0.1.0",
   "type": "module",
-  "main": "./src/index.ts",
+  "main": "./dist/index.js",
   "scripts": {
     "build": "tsc",
     "test": "vitest run",
