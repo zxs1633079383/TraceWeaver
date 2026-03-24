@@ -23,7 +23,7 @@
  *
  * otel:
  *   project_id: string
- *   exporter:   console | otlp  # default: console
+ *   exporter:   console | otlp-http | otlp-grpc  # default: console
  *
  * http:
  *   port:          number
@@ -73,6 +73,31 @@ export interface HarnessConfig {
   dir?: string
 }
 
+export interface IntegrationsConfig {
+  /** 关掉 → Task/Plan 自成根 trace（默认 true） */
+  usecase?: boolean
+  /** 关掉 → 禁止 Plan 级联 cascade_update（默认 true） */
+  plan_fanout?: boolean
+  /** 关掉 → tw taskmaster 命令报错（默认 true） */
+  taskmaster?: boolean
+  /** 关掉 → rejection 只通知 inbox，不自动修复（默认 true） */
+  remediation?: boolean
+  /** 关掉 → 纯 trace，不做约束评估（默认 true） */
+  harness?: boolean
+}
+
+export interface RemediationConfig {
+  enabled?: boolean
+  max_attempts?: number
+  /** queue | inline | notify_only（默认 queue） */
+  mode?: 'queue' | 'inline' | 'notify_only'
+  /**
+   * 限定只有从指定状态拒绝时才触发修复。
+   * 空数组或 undefined = 所有 rejected 均触发。
+   */
+  trigger_from_states?: string[]
+}
+
 export interface TwConfig {
   store_dir?: string
   socket_path?: string
@@ -81,6 +106,8 @@ export interface TwConfig {
   otel?: OtelConfig
   http?: HttpConfig
   harness?: HarnessConfig
+  integrations?: IntegrationsConfig
+  remediation?: RemediationConfig
 }
 
 // ── Loader ─────────────────────────────────────────────────────────────────
