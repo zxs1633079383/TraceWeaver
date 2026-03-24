@@ -65,7 +65,13 @@ export class TriggerExecutor {
         // Race-condition guard: skip if entity already moved past trigger state
         if (entity.state !== event.state) continue
 
-        for (const harness of matchingHarnesses) {
+        // If the entity declares explicit constraint_refs, only evaluate those harnesses.
+        // This lets different entities opt into different harness subsets.
+        const activeHarnesses = (entity.constraint_refs?.length ?? 0) > 0
+          ? matchingHarnesses.filter(h => entity.constraint_refs!.includes(h.id))
+          : matchingHarnesses
+
+        for (const harness of activeHarnesses) {
           if (this.inFlight.has(entity.id)) continue
           this.inFlight.add(entity.id)
           try {

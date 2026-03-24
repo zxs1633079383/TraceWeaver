@@ -71,7 +71,7 @@ npm run build --workspace=packages/tw-daemon   # 目标：零 TypeScript 错误
 ### 测试验证
 
 ```bash
-npm test --workspace=packages/tw-daemon        # 目标：≥ 187 tests passing
+npm test --workspace=packages/tw-daemon        # 目标：≥ 234 tests passing
 ```
 
 TDD 规则：**先写失败测试，再写实现**。不允许先写实现后补测试。

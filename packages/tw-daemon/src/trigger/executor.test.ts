@@ -124,6 +124,36 @@ describe('TriggerExecutor', () => {
     expect(result.entity.state).toBe('in_progress')
   })
 
+  it('only evaluates harnesses listed in entity.constraint_refs when present', async () => {
+    // Both harnesses apply to task + trigger on review, but entity only refs 'always-pass'
+    writeFileSync(join(harnessDir, 'always-fail.md'), FAIL_HARNESS)
+    writeFileSync(join(harnessDir, 'always-pass.md'), PASS_HARNESS)
+    const harness = new HarnessLoader(harnessDir)
+    await harness.scan()
+
+    const evaluator = new ConstraintEvaluator({
+      enabled: true,
+      llmFn: async (prompt) => prompt.includes('MUST_PASS')
+        ? 'RESULT: pass\nAll good'
+        : 'RESULT: fail\nFailed',
+    })
+
+    const executor = new TriggerExecutor({ handler, evaluator, harness, eventBus })
+    executor.start()
+
+    // constraint_refs only references 'always-pass' — 'always-fail' must NOT fire
+    await handler.register({ id: 'cr-task-1', entity_type: 'task', constraint_refs: ['always-pass'] })
+    await handler.updateState({ id: 'cr-task-1', state: 'in_progress' })
+    await handler.updateState({ id: 'cr-task-1', state: 'review' })
+
+    await new Promise(r => setTimeout(r, 400))
+    executor.stop()
+
+    const result = await handler.getStatus({ id: 'cr-task-1' })
+    // Should stay 'review' (pass doesn't auto-complete) and NOT be rejected
+    expect(result.entity.state).toBe('review')
+  })
+
   it('Test A: feedbackLog.record() is called with correct data after a fail evaluation', async () => {
     writeFileSync(join(harnessDir, 'always-fail.md'), FAIL_HARNESS)
     const harness = new HarnessLoader(harnessDir)
