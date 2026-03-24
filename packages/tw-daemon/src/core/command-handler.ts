@@ -282,6 +282,10 @@ export class CommandHandler {
     return { ok: true, data: limited }
   }
 
+  getAllEntities(): Entity[] {
+    return this.registry.getAll()
+  }
+
   resolveImpact(filePath: string, section?: string): ImpactResult {
     return this.impactResolver.resolve(filePath, section)
   }

@@ -8,6 +8,8 @@ import type { EventLog } from './log/event-log.js'
 import type { SpanMetrics } from './metrics/span-metrics.js'
 import type { HarnessLoader } from './harness/loader.js'
 import type { TriggerExecutor } from './trigger/executor.js'
+import type { FeedbackLog } from './feedback/feedback-log.js'
+import type { HarnessValidator } from './harness/validator.js'
 
 export interface IpcServerOptions {
   inbox?: InboxAdapter
@@ -15,6 +17,8 @@ export interface IpcServerOptions {
   spanMetrics?: SpanMetrics
   harnessLoader?: HarnessLoader
   triggerExecutor?: TriggerExecutor
+  feedbackLog?: FeedbackLog
+  harnessValidator?: HarnessValidator
 }
 
 export class IpcServer {
@@ -24,6 +28,8 @@ export class IpcServer {
   private readonly spanMetrics?: SpanMetrics
   private readonly harnessLoader?: HarnessLoader
   private readonly triggerExecutor?: TriggerExecutor
+  private readonly feedbackLog?: FeedbackLog
+  private readonly harnessValidator?: HarnessValidator
 
   constructor(
     private readonly socketPath: string,
@@ -36,6 +42,8 @@ export class IpcServer {
     this.spanMetrics = opts?.spanMetrics
     this.harnessLoader = opts?.harnessLoader
     this.triggerExecutor = opts?.triggerExecutor
+    this.feedbackLog = opts?.feedbackLog
+    this.harnessValidator = opts?.harnessValidator
   }
 
   async start(): Promise<void> {
@@ -153,6 +161,17 @@ export class IpcServer {
         const entityResult = await this.handler.get({ id: entity_id })
         if (!entityResult.ok) throw Object.assign(new Error(entityResult.error.message), { code: entityResult.error.code })
         data = await this.triggerExecutor.runHarness(entityResult.data, entry)
+      } else if (method === 'feedback_query') {
+        if (!this.feedbackLog) throw Object.assign(new Error('FeedbackLog not available'), { code: 'NOT_AVAILABLE' })
+        data = this.feedbackLog.query(params as any)
+      } else if (method === 'feedback_summary') {
+        if (!this.feedbackLog) throw Object.assign(new Error('FeedbackLog not available'), { code: 'NOT_AVAILABLE' })
+        const harnessId = (params as any).harness_id
+        data = harnessId ? this.feedbackLog.getSummary(harnessId) : this.feedbackLog.getAllSummaries()
+      } else if (method === 'harness_validate') {
+        if (!this.harnessValidator) throw Object.assign(new Error('HarnessValidator not available'), { code: 'NOT_AVAILABLE' })
+        const entities = this.handler.getAllEntities()
+        data = this.harnessValidator.validate(entities)
       } else {
         throw Object.assign(new Error(`Unknown method: ${method}`), { code: 'UNKNOWN_METHOD' })
       }

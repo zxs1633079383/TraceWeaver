@@ -4,6 +4,9 @@ import type { CommandHandler } from '../core/command-handler.js'
 import type { ConstraintEvaluator } from '../constraint/evaluator.js'
 import type { HarnessLoader, HarnessEntry } from '../harness/loader.js'
 import type { InboxAdapter } from '../notify/inbox.js'
+import type { FeedbackLog } from '../feedback/feedback-log.js'
+
+const CONSECUTIVE_FAIL_ALERT = 3
 
 export interface TriggerExecutorOptions {
   handler: CommandHandler
@@ -11,6 +14,7 @@ export interface TriggerExecutorOptions {
   harness: HarnessLoader
   eventBus: EventBus
   inbox?: Pick<InboxAdapter, 'write'>
+  feedbackLog?: FeedbackLog
 }
 
 export class TriggerExecutor {
@@ -75,7 +79,30 @@ export class TriggerExecutor {
   }
 
   private async evaluateAndAct(entity: any, harness: HarnessEntry, triggerState: string): Promise<void> {
+    const t0 = Date.now()
     const result = await this.runHarness(entity, harness)
+    const duration_ms = Date.now() - t0
+
+    this.opts.feedbackLog?.record({
+      harness_id: harness.id,
+      entity_id: entity.id,
+      entity_type: entity.entity_type,
+      trigger_state: triggerState,
+      result: result.result as 'pass' | 'fail' | 'skipped',
+      reason: result.refs_checked[0]?.note ?? '',
+      duration_ms,
+    })
+
+    if (this.opts.feedbackLog && result.result === 'fail') {
+      const summary = this.opts.feedbackLog.getSummary(harness.id)
+      if (summary.consecutive_failures >= CONSECUTIVE_FAIL_ALERT) {
+        await this.opts.inbox?.write({
+          event_type: 'entity.state_changed',
+          entity_id: entity.id,
+          message: `[FEEDBACK] Harness '${harness.id}' has failed consecutively ${summary.consecutive_failures} times — review constraint alignment`,
+        })
+      }
+    }
 
     if (result.result === 'fail') {
       try {

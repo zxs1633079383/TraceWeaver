@@ -121,3 +121,6 @@ tw daemon stop
 | `harness_run` | `{entity_id, harness_id}` | 手动运行 Harness |
 | `inbox_list` | `{unackedOnly?}` | 收件箱 |
 | `inbox_ack` | `{id}` | 确认消息 |
+| `feedback_query` | `{harness_id?, entity_id?, result?, since?, limit?}` | FeedbackLog 查询 |
+| `feedback_summary` | `{harness_id?}` | Harness 评估摘要 |
+| `harness_validate` | `{}` | Harness-Entity 对齐检查 |

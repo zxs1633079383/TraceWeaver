@@ -63,5 +63,27 @@ export function harnessCommand(): Command {
       } catch (err: any) { console.error(`Error: ${err.message}`); process.exit(1) }
     })
 
+  cmd.command('validate')
+    .description('Validate harness-entity alignment (orphaned refs, dead harnesses, persistent failures)')
+    .option('--json', 'Output as JSON')
+    .action(async (opts) => {
+      try {
+        await ensureDaemon()
+        const res = await sendIpc({ method: 'harness_validate', params: {} })
+        if (!res.ok) { console.error(`Error: ${(res as any).error.message}`); process.exit(1) }
+        const issues = (res as any).data as any[]
+        if (opts.json) { console.log(JSON.stringify(issues, null, 2)); return }
+        if (issues.length === 0) { console.log('✓ No alignment issues found'); return }
+        for (const issue of issues) {
+          const prefix = issue.severity === 'error' ? '✗' : '⚠'
+          const target = issue.entity_id ? `entity=${issue.entity_id as string}` : `harness=${issue.harness_id as string}`
+          console.log(`${prefix} [${issue.type as string}] ${target}: ${issue.message as string}`)
+          if (issue.suggestion) console.log(`    → ${issue.suggestion as string}`)
+        }
+        const errors = (issues as any[]).filter(i => i.severity === 'error').length
+        if (errors > 0) process.exit(1)
+      } catch (err: any) { console.error(`Error: ${err.message}`); process.exit(1) }
+    })
+
   return cmd
 }

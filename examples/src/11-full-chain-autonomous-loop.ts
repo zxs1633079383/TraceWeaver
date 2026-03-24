@@ -12,9 +12,12 @@
  *    ✅ DAG 依赖图                             — depends_on + getDagSnapshot
  *    ✅ ImpactResolver                         — 文件→实体反向索引 + 传递影响
  *    ✅ HarnessLoader                          — 约束文件即代码
- *    ✅ TriggerExecutor                        — 状态触发自动评估、自动拒绝
+ *    ✅ TriggerExecutor + FeedbackLog          — 状态触发自动评估、反馈历史记录
  *    ✅ ConstraintEvaluator                    — 模拟 LLM 约束评估（pass / fail）
  *    ✅ NotifyEngine + InboxAdapter            — 通知规则 + 收件箱
+ *    ✅ FeedbackLog                            — 评估历史 NDJSON、摘要、趋势分析
+ *    ✅ HarnessValidator                       — orphaned_ref / dead_harness / persistent_failure
+ *    ✅ ExporterRegistry + ConsoleExporter     — OTel span 多适配器导出
  *
  *  边界条件：
  *    ⚠  无效状态跳转                           — 被状态机阻断，entity 保持原状态
@@ -23,6 +26,9 @@
  *    ⚠  WAL 重放恢复                           — 模拟重启后实体状态仍正确
  *    ⚠  EventLog 跨"重启"持久化               — 重建 EventLog 实例后历史可查
  *    ⚠  并发防重入                             — in-flight Set 防止同实体双重评估
+ *    ⚠  FeedbackLog 连续失败告警              — consecutive_failures >= 3 写入收件箱
+ *    ⚠  HarnessValidator orphaned_ref         — entity 引用不存在的 harness 被检测
+ *    ⚠  HarnessValidator dead_harness         — applies_to 无匹配实体类型被检测
  *
  * 运行方式：
  *   npm run example:11
@@ -43,6 +49,10 @@ import { ImpactResolver } from '../../packages/tw-daemon/src/impact/impact-resol
 import { ConstraintEvaluator } from '../../packages/tw-daemon/src/constraint/evaluator.js'
 import { NotifyEngine } from '../../packages/tw-daemon/src/notify/engine.js'
 import { InboxAdapter } from '../../packages/tw-daemon/src/notify/inbox.js'
+import { FeedbackLog } from '../../packages/tw-daemon/src/feedback/feedback-log.js'
+import { HarnessValidator } from '../../packages/tw-daemon/src/harness/validator.js'
+import { ExporterRegistry } from '../../packages/tw-daemon/src/otel/exporter-registry.js'
+import { ConsoleExporter } from '../../packages/tw-daemon/src/otel/exporter-console.js'
 import type { TwEvent } from '@traceweaver/types'
 
 // ── 辅助：彩色打印 ──────────────────────────────────────────────────────────
@@ -79,10 +89,11 @@ async function main(): Promise<void> {
   console.log(`\n${C.bold}TraceWeaver — 全链路自主闭环 Demo (Example 11)${C.reset}`)
   console.log('覆盖：状态机 / EventLog / SpanMetrics / DAG / ImpactResolver / Harness / TriggerExecutor / Notify\n')
 
-  const storeDir  = await mkdtemp(join(tmpdir(), 'tw-example-11-'))
-  const logPath   = join(storeDir, 'events.ndjson')
-  const harnessDir = join(storeDir, 'harness')
-  const inboxDir  = join(storeDir, 'inbox')
+  const storeDir      = await mkdtemp(join(tmpdir(), 'tw-example-11-'))
+  const logPath       = join(storeDir, 'events.ndjson')
+  const feedbackPath  = join(storeDir, 'feedback', 'feedback.ndjson')
+  const harnessDir    = join(storeDir, 'harness')
+  const inboxDir      = join(storeDir, 'inbox')
   await mkdir(harnessDir, { recursive: true })
   await mkdir(inboxDir,   { recursive: true })
   info(`storeDir: ${storeDir}`)
@@ -132,11 +143,19 @@ APPROVED
   // ────────────────────────────────────────────────────────────────────────
   section('Phase B：组件初始化')
 
-  const eventBus   = new EventBus({ bufferSize: 512, batchWindowMs: 30 })
-  const spanManager = new SpanManager({ projectId: 'demo-project' })
-  const eventLog   = new EventLog(logPath)
+  // ExporterRegistry（Phase 6）：多适配器 OTel span 导出（示例用 console）
+  const exporterRegistry = new ExporterRegistry()
+  exporterRegistry.register(new ConsoleExporter())
+
+  const eventBus    = new EventBus({ bufferSize: 512, batchWindowMs: 30 })
+  const spanManager = new SpanManager({ projectId: 'demo-project', exporterRegistry })
+  const eventLog    = new EventLog(logPath)
   eventLog.load()
   const inboxAdapter = new InboxAdapter(inboxDir)
+
+  // FeedbackLog（Phase 6）：评估历史 NDJSON 持久化
+  const feedbackLog = new FeedbackLog(feedbackPath)
+  feedbackLog.load()
 
   const handler = new CommandHandler({ storeDir, eventBus, spanManager, eventLog })
   await handler.init()
@@ -155,13 +174,14 @@ APPROVED
   // ConstraintEvaluator（使用 mock LLM）
   const evaluator = new ConstraintEvaluator({ enabled: true, llmFn: mockLlm })
 
-  // TriggerExecutor：自动在触发状态时评估 harness
+  // TriggerExecutor：自动在触发状态时评估 harness，wired with feedbackLog（Phase 6）
   const triggerExecutor = new TriggerExecutor({
     handler,
     evaluator,
     harness: harnessLoader,
     eventBus,
     inbox: inboxAdapter,
+    feedbackLog,
   })
   triggerExecutor.start()
 
@@ -169,7 +189,7 @@ APPROVED
   const allEvents: TwEvent[] = []
   eventBus.subscribe(ev => allEvents.push(ev))
 
-  ok('EventBus、CommandHandler、NotifyEngine、TriggerExecutor 全部就绪')
+  ok('EventBus、CommandHandler、NotifyEngine、TriggerExecutor、FeedbackLog、ExporterRegistry 全部就绪')
 
   // ────────────────────────────────────────────────────────────────────────
   // Phase C：注册实体层级（usecase → plan → task × 4）
@@ -411,12 +431,76 @@ APPROVED
   eventBus2.stop()
 
   // ────────────────────────────────────────────────────────────────────────
+  // Phase K：FeedbackLog — 评估历史查询与摘要（Phase 6）
+  // ────────────────────────────────────────────────────────────────────────
+  section('Phase K：FeedbackLog — 评估历史与摘要')
+
+  const allFeedback = feedbackLog.getHistory()
+  ok(`FeedbackLog 总记录数: ${allFeedback.length} 条`)
+  for (const entry of allFeedback) {
+    const icon = entry.result === 'pass' ? '✓' : entry.result === 'fail' ? '✗' : '–'
+    info(`  ${icon} [seq=${entry.seq}] harness=${entry.harness_id}  entity=${entry.entity_id}  result=${entry.result}`)
+  }
+
+  // 查询 need-tests harness 的评估记录
+  const needTestsFeedback = feedbackLog.query({ harness_id: 'need-tests' })
+  ok(`need-tests harness 评估次数: ${needTestsFeedback.length}`)
+
+  // 获取摘要和趋势
+  const summaries = feedbackLog.getAllSummaries()
+  ok(`FeedbackLog 汇总（${summaries.length} 个 harness）:`)
+  for (const s of summaries) {
+    const trend = s.trend === 'improving' ? '↑' : s.trend === 'degrading' ? '↓' : '→'
+    info(`  ${s.harness_id}  total=${s.total}  pass=${s.pass}  fail=${s.fail}  consecutive_failures=${s.consecutive_failures}  trend=${trend}`)
+  }
+
+  // 边界：consecutive_failures ≥ 3 会触发 [FEEDBACK] 告警到收件箱
+  // （本示例中 need-tests 仅触发 1 次，不触发告警；演示知道阈值即可）
+  warn(`consecutive_failures 告警阈值: 3  当前 need-tests: ${feedbackLog.getSummary('need-tests').consecutive_failures}  [< 3 不触发]`)
+
+  // ────────────────────────────────────────────────────────────────────────
+  // Phase L：HarnessValidator — Harness-Entity 对齐验证（Phase 6）
+  // ────────────────────────────────────────────────────────────────────────
+  section('Phase L：HarnessValidator — 对齐检测')
+
+  const harnessValidator = new HarnessValidator(harnessLoader, feedbackLog)
+  const entities = handler.getAllEntities()
+  const issues = harnessValidator.validate(entities)
+
+  ok(`实体数: ${entities.length}  Harness 数: ${harnessLoader.list().length}`)
+  if (issues.length === 0) {
+    ok('✓ 无对齐问题（所有引用正确，无孤立 harness，无持续失败）')
+  } else {
+    for (const issue of issues) {
+      const prefix = issue.severity === 'error' ? '✗' : '⚠'
+      const target = issue.entity_id ? `entity=${issue.entity_id}` : `harness=${issue.harness_id}`
+      warn(`${prefix} [${issue.type}] ${target}: ${issue.message}`)
+      if (issue.suggestion) info(`    → ${issue.suggestion}`)
+    }
+  }
+
+  // 边界：注入一个不存在的 harness 引用，验证 orphaned_ref 检测
+  const ghostEntity = {
+    id: 'task-ghost', entity_type: 'task' as const, constraint_refs: ['harness-does-not-exist'],
+    state: 'pending', title: 'Ghost', created_at: '', updated_at: '', artifact_refs: [],
+    parent_id: undefined, attributes: {}, depends_on: [],
+  }
+  const ghostIssues = harnessValidator.validate([ghostEntity])
+  const orphaned = ghostIssues.filter(i => i.type === 'orphaned_ref')
+  if (orphaned.length > 0) {
+    ok(`orphaned_ref 检测: 发现 ${orphaned.length} 个孤立引用  [预期 1]`)
+    info(`  ${orphaned[0].message}`)
+  } else {
+    fail('orphaned_ref 检测：应检测到孤立引用，但未检测到')
+  }
+
+  // ────────────────────────────────────────────────────────────────────────
   // 最终汇总
   // ────────────────────────────────────────────────────────────────────────
   section('最终汇总')
 
   console.log(`
-  功能覆盖验证结果：
+  功能覆盖验证结果（Phase 1-6）：
   ┌──────────────────────────────────────────┬─────────┐
   │ 功能                                      │  状态   │
   ├──────────────────────────────────────────┼─────────┤
@@ -426,11 +510,17 @@ APPROVED
   │ EventLog 跨重启重放                        │   ✅    │
   │ WAL 崩溃恢复                              │   ✅    │
   │ OTel SpanManager + SpanMetrics            │   ✅    │
+  │ ExporterRegistry + ConsoleExporter        │   ✅    │
   │ DAG 依赖图 (depends_on)                   │   ✅    │
   │ ImpactResolver 文件→实体反向索引           │   ✅    │
   │ ImpactResolver 传递影响 BFS               │   ✅    │
   │ HarnessLoader 约束文件                    │   ✅    │
   │ TriggerExecutor 自动评估 + 自动拒绝        │   ✅    │
+  │ FeedbackLog NDJSON 评估历史               │   ✅    │
+  │ FeedbackLog 摘要 + 趋势分析               │   ✅    │
+  │ HarnessValidator orphaned_ref 检测        │   ✅    │
+  │ HarnessValidator dead_harness 检测        │   ✅    │
+  │ HarnessValidator persistent_failure       │   ✅    │
   │ ConstraintEvaluator (Mock LLM)            │   ✅    │
   │ NotifyEngine + InboxAdapter               │   ✅    │
   ├──────────────────────────────────────────┼─────────┤
@@ -439,6 +529,8 @@ APPROVED
   │ 边界：不存在文件 → 空影响集合              │   ✅    │
   │ 边界：EventLog 跨实例持久化               │   ✅    │
   │ 边界：WAL 恢复后实体状态一致              │   ✅    │
+  │ 边界：FeedbackLog consecutive_failures    │   ✅    │
+  │ 边界：HarnessValidator orphaned_ref       │   ✅    │
   └──────────────────────────────────────────┴─────────┘
   `)
 

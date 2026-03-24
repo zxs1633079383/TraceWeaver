@@ -13,6 +13,7 @@ import { logCommand }      from './commands/log.js'
 import { metricsCommand }  from './commands/metrics.js'
 import { harnessCommand }  from './commands/harness.js'
 import { watchCommand }    from './commands/watch.js'
+import { feedbackCommand } from './commands/feedback.js'
 
 const program = new Command()
 program
@@ -33,5 +34,6 @@ program.addCommand(logCommand())
 program.addCommand(metricsCommand())
 program.addCommand(harnessCommand())
 program.addCommand(watchCommand())
+program.addCommand(feedbackCommand())
 
 program.parseAsync(process.argv).catch(e => { console.error(e); process.exit(1) })

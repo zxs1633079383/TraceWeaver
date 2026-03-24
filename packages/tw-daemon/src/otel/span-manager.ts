@@ -1,10 +1,13 @@
 import { randomUUID } from 'node:crypto'
 import type { Entity, EntityType, SpanMeta, SpanEvent } from '@traceweaver/types'
+import type { ExporterRegistry } from './exporter-registry.js'
 
 export interface SpanManagerOptions {
   export?: boolean
   otlpEndpoint?: string
   projectId?: string
+  /** Optional registry of exporters. When provided, endSpan() calls registry.exportAll(). */
+  exporterRegistry?: ExporterRegistry
 }
 
 export interface CreateSpanInput {
@@ -16,9 +19,11 @@ export interface CreateSpanInput {
 export class SpanManager {
   private readonly spans = new Map<string, SpanMeta>()
   private readonly projectTraceId: string
+  private readonly exporterRegistry?: ExporterRegistry
 
   constructor(private readonly opts: SpanManagerOptions = {}) {
     this.projectTraceId = randomUUID().replace(/-/g, '')
+    this.exporterRegistry = opts.exporterRegistry
   }
 
   createSpan(input: CreateSpanInput): SpanMeta {
@@ -62,6 +67,10 @@ export class SpanManager {
     if (!meta || meta.end_time) return null
     meta.status = status
     meta.end_time = new Date().toISOString()
+    if (this.exporterRegistry) {
+      // Fire-and-forget: export errors are handled inside ExporterRegistry.exportAll
+      void this.exporterRegistry.exportAll([meta])
+    }
     return meta
   }
 

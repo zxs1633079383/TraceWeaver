@@ -2,6 +2,7 @@
 import { join } from 'node:path'
 import { writeFile, rm } from 'node:fs/promises'
 import { randomUUID } from 'node:crypto'
+import chokidar from 'chokidar'
 import { IpcServer } from './ipc-server.js'
 import { CommandHandler } from './core/command-handler.js'
 import { EventBus } from './core/event-bus/event-bus.js'
@@ -15,6 +16,12 @@ import { HarnessLoader } from './harness/loader.js'
 import { TriggerExecutor } from './trigger/executor.js'
 import { ConstraintEvaluator } from './constraint/evaluator.js'
 import { loadConfig, resolveWatchDirs } from './config/loader.js'
+import { FeedbackLog } from './feedback/feedback-log.js'
+import { HarnessValidator } from './harness/validator.js'
+import { ExporterRegistry } from './otel/exporter-registry.js'
+import { ConsoleExporter } from './otel/exporter-console.js'
+import { OtlpHttpExporter } from './otel/exporter-http.js'
+import { OtlpGrpcExporter } from './otel/exporter-grpc.js'
 import type { NotifyRule } from './notify/engine.js'
 
 const PROJECT_ROOT = process.cwd()
@@ -35,7 +42,19 @@ async function main() {
   const eventLog = new EventLog(join(STORE_DIR, 'events.ndjson'))
   eventLog.load()
 
-  const spanManager = new SpanManager({ projectId: 'default' })
+  const exporterRegistry = new ExporterRegistry()
+  const exporterType = process.env.TW_OTEL_EXPORTER ?? 'console'
+  const exporterEndpoint = process.env.TW_OTEL_ENDPOINT ?? 'localhost:4317'
+
+  if (exporterType === 'console') {
+    exporterRegistry.register(new ConsoleExporter())
+  } else if (exporterType === 'otlp-http') {
+    exporterRegistry.register(new OtlpHttpExporter({ endpoint: exporterEndpoint }))
+  } else if (exporterType === 'otlp-grpc') {
+    exporterRegistry.register(new OtlpGrpcExporter({ endpoint: exporterEndpoint }))
+  }
+
+  const spanManager = new SpanManager({ projectId: 'default', exporterRegistry })
   const spanMetrics = new SpanMetrics(spanManager)
 
   const handler = new CommandHandler({ storeDir: STORE_DIR, eventBus, spanManager, eventLog })
@@ -64,11 +83,41 @@ async function main() {
   const harnessLoader = new HarnessLoader(join(STORE_DIR, 'harness'))
   await harnessLoader.scan()
 
+  const feedbackLog = new FeedbackLog(join(STORE_DIR, 'feedback', 'feedback.ndjson'))
+  feedbackLog.load()
+
+  const harnessValidator = new HarnessValidator(harnessLoader, feedbackLog)
+
+  // Initial alignment check on startup
+  const startupIssues = harnessValidator.validate(handler.getAllEntities())
+  for (const issue of startupIssues) {
+    await inbox.write({
+      event_type: 'entity.state_changed',
+      entity_id: 'system',
+      message: `[VALIDATOR] ${issue.severity.toUpperCase()}: ${issue.message}`,
+    })
+  }
+
+  // Watch harness dir for changes → rescan + revalidate
+  const harnessDir = join(STORE_DIR, 'harness')
+  const harnessWatcher = chokidar.watch(harnessDir, { ignoreInitial: true, persistent: false })
+  harnessWatcher.on('all', async () => {
+    await harnessLoader.scan()
+    const issues = harnessValidator.validate(handler.getAllEntities())
+    for (const issue of issues) {
+      await inbox.write({
+        event_type: 'entity.state_changed',
+        entity_id: 'system',
+        message: `[VALIDATOR] ${issue.severity.toUpperCase()}: ${issue.message}`,
+      })
+    }
+  })
+
   const evaluator = new ConstraintEvaluator({
     enabled: !!process.env.ANTHROPIC_API_KEY,
     apiKey: process.env.ANTHROPIC_API_KEY,
   })
-  const triggerExecutor = new TriggerExecutor({ handler, evaluator, harness: harnessLoader, eventBus, inbox })
+  const triggerExecutor = new TriggerExecutor({ handler, evaluator, harness: harnessLoader, eventBus, inbox, feedbackLog })
   triggerExecutor.start()
 
   // ── file.changed → ImpactResolver → artifact.modified ──────────────────
@@ -132,6 +181,8 @@ async function main() {
     spanMetrics,
     harnessLoader,
     triggerExecutor,
+    feedbackLog,
+    harnessValidator,
   })
   await server.start()
 
@@ -156,8 +207,10 @@ async function main() {
     triggerExecutor.stop()
     notifyEngine.stop()
     await fsWatcher.stop()
+    await harnessWatcher.close()
     eb.stop()
     await s.stop()
+    await exporterRegistry.shutdown()
     try { await rm(PID_FILE) } catch {}
     process.exit(0)
   }

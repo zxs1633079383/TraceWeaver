@@ -7,6 +7,7 @@ import { HarnessLoader } from '../harness/loader.js'
 import { EventBus } from '../core/event-bus/event-bus.js'
 import { CommandHandler } from '../core/command-handler.js'
 import { ConstraintEvaluator } from '../constraint/evaluator.js'
+import { FeedbackLog } from '../feedback/feedback-log.js'
 
 const FAIL_HARNESS = `---
 id: always-fail
@@ -121,5 +122,80 @@ describe('TriggerExecutor', () => {
 
     const result = await handler.getStatus({ id: 'uc-no-trigger' })
     expect(result.entity.state).toBe('in_progress')
+  })
+
+  it('Test A: feedbackLog.record() is called with correct data after a fail evaluation', async () => {
+    writeFileSync(join(harnessDir, 'always-fail.md'), FAIL_HARNESS)
+    const harness = new HarnessLoader(harnessDir)
+    await harness.scan()
+
+    const evaluator = new ConstraintEvaluator({
+      enabled: true,
+      llmFn: async () => 'RESULT: fail\nTest constraint failure',
+    })
+
+    const feedbackLog = new FeedbackLog(join(dir, 'feedback', 'feedback.ndjson'))
+
+    const inbox: { messages: string[] } = { messages: [] }
+    const inboxAdapter = {
+      write: async (msg: { event_type: string; entity_id: string; message: string }) => {
+        inbox.messages.push(msg.message)
+      },
+    }
+
+    const executor = new TriggerExecutor({ handler, evaluator, harness, eventBus, feedbackLog, inbox: inboxAdapter })
+    executor.start()
+
+    await handler.register({ id: 'feedback-task-1', entity_type: 'task', constraint_refs: ['always-fail'] })
+    await handler.updateState({ id: 'feedback-task-1', state: 'in_progress' })
+    await handler.updateState({ id: 'feedback-task-1', state: 'review' })
+
+    await new Promise(r => setTimeout(r, 400))
+    executor.stop()
+
+    const history = feedbackLog.getHistory()
+    expect(history).toHaveLength(1)
+    expect(history[0].result).toBe('fail')
+    expect(history[0].harness_id).toBe('always-fail')
+    expect(history[0].entity_id).toBe('feedback-task-1')
+  })
+
+  it('Test B: inbox receives [FEEDBACK] message after 3 consecutive fail evaluations on same harness', async () => {
+    writeFileSync(join(harnessDir, 'always-fail.md'), FAIL_HARNESS)
+    const harness = new HarnessLoader(harnessDir)
+    await harness.scan()
+
+    const evaluator = new ConstraintEvaluator({
+      enabled: true,
+      llmFn: async () => 'RESULT: fail\nTest constraint failure',
+    })
+
+    const feedbackLog = new FeedbackLog(join(dir, 'feedback2', 'feedback.ndjson'))
+
+    const inboxMessages: string[] = []
+    const inboxAdapter = {
+      write: async (msg: { event_type: string; entity_id: string; message: string }) => {
+        inboxMessages.push(msg.message)
+      },
+    }
+
+    const executor = new TriggerExecutor({ handler, evaluator, harness, eventBus, feedbackLog, inbox: inboxAdapter })
+    executor.start()
+
+    // Register 3 separate entities with different IDs to avoid inFlight guard
+    for (let i = 1; i <= 3; i++) {
+      await handler.register({ id: `fb-task-${i}`, entity_type: 'task', constraint_refs: ['always-fail'] })
+      await handler.updateState({ id: `fb-task-${i}`, state: 'in_progress' })
+      await handler.updateState({ id: `fb-task-${i}`, state: 'review' })
+      // Wait for each evaluation to complete before the next to ensure sequential recording
+      await new Promise(r => setTimeout(r, 400))
+    }
+
+    executor.stop()
+
+    const feedbackMessage = inboxMessages.find(m => m.includes('[FEEDBACK]'))
+    expect(feedbackMessage).toBeDefined()
+    expect(feedbackMessage).toContain('[FEEDBACK]')
+    expect(feedbackMessage).toContain('always-fail')
   })
 })

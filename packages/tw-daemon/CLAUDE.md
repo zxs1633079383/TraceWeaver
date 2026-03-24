@@ -117,6 +117,8 @@ tw impact <变更的文件路径>
 | 依赖 | 用途 |
 |------|------|
 | `@anthropic-ai/sdk` | LLM 约束评估 |
+| `@grpc/grpc-js`    | gRPC client for OTLP/gRPC export |
+| `@grpc/proto-loader` | Proto file loader for gRPC       |
 | `@modelcontextprotocol/sdk` | MCP Server |
 | `chokidar` | 跨平台文件监听 |
 | `fastify` | HTTP API |
