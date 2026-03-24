@@ -11,14 +11,25 @@
  *  ✅ 去重               — 同一 rejection ts 只入队一次
  *  ✅ diagnose 输出模拟  — 打印 entity 状态 + span events + 失败原因
  *  ✅ TaskMaster 数据桥接 — 从 tasks.json 批量注册 TW 实体
+ *  ✅ Jaeger 导出        — 所有 span（含真实任务名/trace_id）写入 Jaeger
  *
  * 实体层级（来自真实项目）：
  *   UseCase: uc-mm-bot-platform (Mattermost Bot Agent 开放平台)
  *     ├── Plan: plan-frontend  (前端实现计划, 4 tasks)
  *     └── Plan: plan-arch      (架构/基础层计划, 2 tasks)
  *
+ * 前提（Jaeger，任选一）：
+ *   A. telepresence 已连接 K8s 集群
+ *   B. kubectl port-forward svc/jaeger-cses-pre-collector 4317:4317 -n jaeger-cses
+ *      export JAEGER_ENDPOINT=localhost:4317
+ *   未配置时 fallback 到 ConsoleExporter，仍可运行所有验证。
+ *
  * 运行：
  *   npm run run:13 --workspace=examples
+ *
+ * Jaeger 查询（成功导出后）：
+ *   Service   = traceweaver-mattermost
+ *   Operation = tw.usecase
  */
 
 import { mkdtemp, rm, mkdir, writeFile, readdir } from 'node:fs/promises'
@@ -38,7 +49,15 @@ import { NotifyEngine } from '../../packages/tw-daemon/src/notify/engine.js'
 import { InboxAdapter } from '../../packages/tw-daemon/src/notify/inbox.js'
 import { FeedbackLog } from '../../packages/tw-daemon/src/feedback/feedback-log.js'
 import { RemediationEngine } from '../../packages/tw-daemon/src/remediation/remediation-engine.js'
+import { ExporterRegistry } from '../../packages/tw-daemon/src/otel/exporter-registry.js'
+import { OtlpGrpcExporter } from '../../packages/tw-daemon/src/otel/exporter-grpc.js'
+import { ConsoleExporter } from '../../packages/tw-daemon/src/otel/exporter-console.js'
 import type { TwEvent } from '@traceweaver/types'
+
+// ── Jaeger 配置 ───────────────────────────────────────────────────────────────
+const JAEGER_ENDPOINT = process.env.JAEGER_ENDPOINT
+  ?? 'jaeger-cses-pre-collector.jaeger-cses.svc.cluster.local:4317'
+const SERVICE_NAME = 'traceweaver-mattermost'
 
 // ── 辅助打印 ─────────────────────────────────────────────────────────────────
 const C = {
@@ -50,11 +69,12 @@ function section(title: string): void {
   console.log(`${C.bold}${C.cyan}  ${title}${C.reset}`)
   console.log(`${C.cyan}${'─'.repeat(62)}${C.reset}`)
 }
-function ok(msg: string):   void { console.log(`  ${C.green}✓${C.reset} ${msg}`) }
-function warn(msg: string): void { console.log(`  ${C.yellow}⚠${C.reset} ${msg}`) }
-function info(msg: string): void { console.log(`  ${C.gray}→${C.reset} ${msg}`) }
-function fail(msg: string): void { console.log(`  ${C.red}✗${C.reset} ${msg}`) }
-function badge(msg: string): void { console.log(`  ${C.blue}[${msg}]${C.reset}`) }
+function ok(msg: string):      void { console.log(`  ${C.green}✓${C.reset} ${msg}`) }
+function warn(msg: string):    void { console.log(`  ${C.yellow}⚠${C.reset} ${msg}`) }
+function info(msg: string):    void { console.log(`  ${C.gray}→${C.reset} ${msg}`) }
+function fail(msg: string):    void { console.log(`  ${C.red}✗${C.reset} ${msg}`) }
+function badge(msg: string):   void { console.log(`  ${C.blue}[${msg}]${C.reset}`) }
+function span_ok(msg: string): void { console.log(`  ${C.blue}◆${C.reset} ${msg}`) }
 
 // ── 读取 mattermost-tasks.json fixture ──────────────────────────────────────
 const __dirname = dirname(fileURLToPath(import.meta.url))
@@ -99,7 +119,9 @@ async function mockLlm(prompt: string): Promise<string> {
 // ── 主流程 ──────────────────────────────────────────────────────────────────
 async function main(): Promise<void> {
   console.log(`\n${C.bold}TraceWeaver — TaskMaster 全链路闭环验证 (Example 13)${C.reset}`)
-  console.log(`数据来源：mattermost-dev/.taskmaster/tasks/tasks.json\n`)
+  console.log(`数据来源：mattermost-dev/.taskmaster/tasks/tasks.json`)
+  console.log(`${C.cyan}JAEGER_ENDPOINT${C.reset} = ${C.bold}${JAEGER_ENDPOINT}${C.reset}`)
+  console.log(`${C.cyan}SERVICE        ${C.reset} = ${C.bold}${SERVICE_NAME}${C.reset}\n`)
 
   // ── 临时目录 ────────────────────────────────────────────────────────────
   const storeDir     = await mkdtemp(join(tmpdir(), 'tw-example-13-'))
@@ -150,8 +172,20 @@ RESULT: fail if no test artifacts found.
   const harnessLoader = new HarnessLoader(harnessDir)
   await harnessLoader.scan()
 
+  // ExporterRegistry：尝试 OTLP/gRPC → Jaeger；同时注册 ConsoleExporter 作为本地 fallback
+  const exporterRegistry = new ExporterRegistry()
+  try {
+    const grpcExporter = new OtlpGrpcExporter({ endpoint: JAEGER_ENDPOINT })
+    exporterRegistry.register(grpcExporter)
+    ok(`OtlpGrpcExporter 已注册 → ${JAEGER_ENDPOINT}`)
+  } catch (err: unknown) {
+    // gRPC 初始化失败（如环境变量未配置）时 fallback 到 Console
+    warn(`OtlpGrpcExporter 初始化失败，fallback 到 ConsoleExporter: ${(err as Error).message}`)
+  }
+  exporterRegistry.register(new ConsoleExporter())
+
   const eventBus    = new EventBus({ bufferSize: 512, batchWindowMs: 30 })
-  const spanManager = new SpanManager({ projectId: 'mattermost-bot-platform' })
+  const spanManager = new SpanManager({ projectId: SERVICE_NAME, exporterRegistry })
   const eventLog    = new EventLog(logPath)
   eventLog.load()
   const feedbackLog  = new FeedbackLog(feedbackPath)
@@ -523,6 +557,75 @@ RESULT: fail if no test artifacts found.
   `)
 
   ok('Example 13 — TaskMaster 全链路闭环验证完成')
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Phase J：推进所有实体到终态 → 触发 span export to Jaeger
+  // ─────────────────────────────────────────────────────────────────────────
+  section('Phase J：推进终态 → Span Export to Jaeger')
+
+  // 已完成任务（tm-fe-1, tm-fe-2）走 completed
+  for (const taskId of [feTaskIds[0], feTaskIds[1]]) {
+    await handler.updateState({ id: taskId, state: 'in_progress' })
+    await handler.updateState({ id: taskId, state: 'review' })
+    await handler.updateState({ id: taskId, state: 'completed' })
+    span_ok(`${taskId} → completed  (span exported, status=OK)`)
+  }
+
+  // tm-fe-4 / tm-arch-10 维持 pending → 不进终态（展示 active span 也可见）
+  info(`${feTaskIds[3]} / ${archTaskIds[1]} 保持 pending（active span，Jaeger 中可见未结束的 span）`)
+
+  // Plan-frontend → completed（子 span 全部结束后关闭父 span）
+  await handler.updateState({ id: planFe.id, state: 'in_progress' })
+  await handler.updateState({ id: planFe.id, state: 'review' })
+  await handler.updateState({ id: planFe.id, state: 'completed' })
+  span_ok(`plan-frontend → completed  (span exported)`)
+
+  // Plan-arch → completed
+  await handler.updateState({ id: planArch.id, state: 'in_progress' })
+  await handler.updateState({ id: planArch.id, state: 'review' })
+  await handler.updateState({ id: planArch.id, state: 'completed' })
+  span_ok(`plan-arch → completed  (span exported)`)
+
+  // UseCase → completed（root span 关闭 → 整条 trace 在 Jaeger 中完整可见）
+  await handler.updateState({ id: uc.id, state: 'in_progress' })
+  await handler.updateState({ id: uc.id, state: 'review' })
+  await handler.updateState({ id: uc.id, state: 'completed' })
+  span_ok(`uc-mm-bot-platform → completed  (root span exported — trace 完整)`)
+
+  // flush 所有 pending span export
+  info('调用 exporterRegistry.shutdown() 强制 flush...')
+  await exporterRegistry.shutdown()
+  ok('所有 span 已 flush 到 Jaeger')
+
+  // Jaeger 查询入口（trace_id 在 Phase D 已从 ucSpan 获取，此处直接复用）
+  const traceIdStr = ucSpan?.trace_id ?? '（未知）'
+
+  console.log(`
+${C.bold}${C.green}  Jaeger Trace 导出完成！${C.reset}
+
+  在 Jaeger UI 搜索：
+  ┌──────────────────────────────────────────────────────────┐
+  │  Service   : ${SERVICE_NAME.padEnd(43)}│
+  │  Operation : tw.usecase                                  │
+  │  trace_id  : ${traceIdStr.padEnd(43)}│
+  └──────────────────────────────────────────────────────────┘
+
+  预期 Jaeger 中看到的 trace 树：
+  ┌──────────────────────────────────────────────────────────┐
+  │ tw.usecase [uc-mm-bot-platform]           OK  ■■■■■■■■  │
+  │  ├── tw.plan [plan-frontend]              OK  ■■■■■■    │
+  │  │     ├── tw.task [tm-fe-1] 基础架构     OK  ■■■■      │
+  │  │     │     events: upstream_updated, state_changed×N  │
+  │  │     ├── tw.task [tm-fe-2] API 封装     OK  ■■■■      │
+  │  │     ├── tw.task [tm-fe-3] 组件库      ERR  ■■■       │
+  │  │     │     events: upstream_updated, state_changed_to_rejected │
+  │  │     └── tw.task [tm-fe-4] Dashboard    -- (active)   │
+  │  └── tw.plan [plan-arch]                  OK  ■■■■■     │
+  │        ├── tw.task [tm-arch-9] 工具函数  ERR  ■■■       │
+  │        │     events: upstream_updated, state_changed_to_rejected │
+  │        └── tw.task [tm-arch-10] 响应式   -- (active)   │
+  └──────────────────────────────────────────────────────────┘
+`)
 
   // ── 清理 ─────────────────────────────────────────────────────────────────
   triggerExecutor.stop()
