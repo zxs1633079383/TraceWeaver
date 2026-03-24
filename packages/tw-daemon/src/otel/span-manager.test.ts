@@ -74,3 +74,45 @@ describe('SpanManager', () => {
     expect(sm.getSpan('T-1')?.attributes['tw.task.retry_count']).toBe(2)
   })
 })
+
+describe('trace_id inheritance', () => {
+  let sm: SpanManager
+
+  beforeEach(() => { sm = new SpanManager({ export: false }) })
+
+  it('root span (no parent) generates its own trace_id', () => {
+    sm.createSpan({ entity_id: 'uc-1', entity_type: 'usecase' })
+    const uc = sm.getSpan('uc-1')!
+    expect(uc.trace_id).toBeDefined()
+    expect(uc.trace_id).toHaveLength(32)
+  })
+
+  it('child span inherits parent trace_id', () => {
+    sm.createSpan({ entity_id: 'uc-1', entity_type: 'usecase' })
+    const ucSpanId = sm.getSpan('uc-1')!.span_id
+    sm.createSpan({ entity_id: 'plan-1', entity_type: 'plan', parent_span_id: ucSpanId })
+    expect(sm.getSpan('plan-1')!.trace_id).toBe(sm.getSpan('uc-1')!.trace_id)
+  })
+
+  it('grandchild span inherits same trace_id across 3 levels', () => {
+    sm.createSpan({ entity_id: 'uc-1', entity_type: 'usecase' })
+    const ucSpanId = sm.getSpan('uc-1')!.span_id
+    sm.createSpan({ entity_id: 'plan-1', entity_type: 'plan', parent_span_id: ucSpanId })
+    const planSpanId = sm.getSpan('plan-1')!.span_id
+    sm.createSpan({ entity_id: 'task-1', entity_type: 'task', parent_span_id: planSpanId })
+    const ucTraceId = sm.getSpan('uc-1')!.trace_id
+    expect(sm.getSpan('plan-1')!.trace_id).toBe(ucTraceId)
+    expect(sm.getSpan('task-1')!.trace_id).toBe(ucTraceId)
+  })
+
+  it('two different root entities get different trace_ids', () => {
+    sm.createSpan({ entity_id: 'uc-1', entity_type: 'usecase' })
+    sm.createSpan({ entity_id: 'uc-2', entity_type: 'usecase' })
+    expect(sm.getSpan('uc-1')!.trace_id).not.toBe(sm.getSpan('uc-2')!.trace_id)
+  })
+
+  it('orphan entity (unknown parent_span_id) generates own trace_id', () => {
+    sm.createSpan({ entity_id: 'task-orphan', entity_type: 'task', parent_span_id: 'nonexistent' })
+    expect(sm.getSpan('task-orphan')!.trace_id).toBeDefined()
+  })
+})

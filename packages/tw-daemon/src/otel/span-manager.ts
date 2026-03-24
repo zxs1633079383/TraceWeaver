@@ -18,12 +18,19 @@ export interface CreateSpanInput {
 
 export class SpanManager {
   private readonly spans = new Map<string, SpanMeta>()
-  private readonly projectTraceId: string
   private readonly exporterRegistry?: ExporterRegistry
 
   constructor(private readonly opts: SpanManagerOptions = {}) {
-    this.projectTraceId = randomUUID().replace(/-/g, '')
     this.exporterRegistry = opts.exporterRegistry
+  }
+
+  private deriveTraceId(parentSpanId?: string): string {
+    if (parentSpanId) {
+      for (const span of this.spans.values()) {
+        if (span.span_id === parentSpanId) return span.trace_id
+      }
+    }
+    return randomUUID().replace(/-/g, '')
   }
 
   createSpan(input: CreateSpanInput): SpanMeta {
@@ -33,7 +40,7 @@ export class SpanManager {
     const meta: SpanMeta = {
       entity_id: input.entity_id,
       entity_type: input.entity_type,
-      trace_id: this.projectTraceId,
+      trace_id: this.deriveTraceId(input.parent_span_id),
       span_id: randomUUID().replace(/-/g, '').slice(0, 16),
       parent_span_id: input.parent_span_id,
       start_time: new Date().toISOString(),
