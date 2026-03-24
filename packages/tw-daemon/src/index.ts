@@ -1,6 +1,7 @@
 // packages/tw-daemon/src/index.ts
 import { join } from 'node:path'
 import { writeFile, rm } from 'node:fs/promises'
+import { randomUUID } from 'node:crypto'
 import { IpcServer } from './ipc-server.js'
 import { CommandHandler } from './core/command-handler.js'
 import { EventBus } from './core/event-bus/event-bus.js'
@@ -69,6 +70,43 @@ async function main() {
   })
   const triggerExecutor = new TriggerExecutor({ handler, evaluator, harness: harnessLoader, eventBus, inbox })
   triggerExecutor.start()
+
+  // ── file.changed → ImpactResolver → artifact.modified ──────────────────
+  // Standard pipeline: FsWatcher emits file.changed (from config.watch.dirs)
+  // → ImpactResolver maps file path to directly + transitively affected entities
+  // → emit artifact.modified per entity so the rest of the pipeline (NotifyEngine,
+  //   TriggerExecutor, EventLog) can react to it through the standard event bus.
+  eventBus.subscribe(event => {
+    if (event.type !== 'file.changed') return
+    const filePath = event.attributes?.path as string | undefined
+    if (!filePath) return
+
+    const impact = handler.resolveImpact(filePath)
+    const directly   = impact.directly_affected
+    const transitively = impact.transitively_affected
+    if (directly.length + transitively.length === 0) return
+
+    for (const entity of directly) {
+      eventBus.publish({
+        id: randomUUID(),
+        type: 'artifact.modified',
+        entity_id: entity.id,
+        entity_type: entity.entity_type,
+        ts: new Date().toISOString(),
+        attributes: { trigger_file: filePath, impact_type: 'direct' },
+      })
+    }
+    for (const entity of transitively) {
+      eventBus.publish({
+        id: randomUUID(),
+        type: 'artifact.modified',
+        entity_id: entity.id,
+        entity_type: entity.entity_type,
+        ts: new Date().toISOString(),
+        attributes: { trigger_file: filePath, impact_type: 'transitive' },
+      })
+    }
+  })
 
   // Conditional MCP startup (when spawned by MCP client with TW_MCP_STDIO=1)
   if (process.env.TW_MCP_STDIO) {
