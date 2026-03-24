@@ -15,6 +15,8 @@ export class FsWatcher {
       ignoreInitial: true,
       persistent: false,
       awaitWriteFinish: { stabilityThreshold: 100, pollInterval: 50 },
+      // Exclude daemon-internal files: socket, pid, WAL, NDJSON log, JSON store
+      ignored: [/\.sock$/, /\.pid$/, /\.wal$/, /\.ndjson$/, /\.json$/],
     })
 
     this.watcher.on('change', (filePath) => this.emit(filePath, 'changed'))
