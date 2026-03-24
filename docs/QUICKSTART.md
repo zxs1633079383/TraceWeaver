@@ -1,18 +1,18 @@
-# TraceWeaver Quick Start Guide
+# TraceWeaver 快速上手指南
 
-TraceWeaver is a lightweight, local-first entity tracking system for AI-assisted workflows. It gives you a state machine, event bus, DAG dependency graph, notification engine, LLM constraint validation, and OpenTelemetry export — all backed by an append-only WAL and operable via CLI, programmatic API, MCP server, or HTTP.
-
----
-
-## Prerequisites
-
-- **Node.js** v18 or later
-- **npm** v9 or later (workspaces support required)
-- Optional: an Anthropic API key for constraint validation (`TW_ANTHROPIC_API_KEY`)
+TraceWeaver 是一款轻量级、本地优先的实体追踪系统，专为 AI 辅助研发工作流设计。它内置状态机、事件总线、DAG 依赖图、通知引擎、LLM 约束验证和 OpenTelemetry 导出——全部基于追加写入的 WAL，可通过 CLI、编程 API、MCP Server 或 HTTP 操作。
 
 ---
 
-## Installation
+## 前置条件
+
+- **Node.js** v18 或更高版本
+- **npm** v9 或更高版本（需要 workspaces 支持）
+- 可选：Anthropic API Key，用于约束验证（`ANTHROPIC_API_KEY`）
+
+---
+
+## 安装
 
 ```bash
 git clone https://github.com/your-org/traceweaver.git
@@ -21,32 +21,32 @@ npm install
 npm run build
 ```
 
-Install the CLI globally (optional but recommended):
+全局安装 CLI（可选，但推荐）：
 
 ```bash
 npm install -g .
-# or use npx tw <command> without global install
+# 或者不全局安装，使用 npx tw <命令>
 ```
 
 ---
 
-## Core Concepts
+## 核心概念
 
-### Entities
+### 实体（Entities）
 
-Every unit of work in TraceWeaver is an **entity**. Three built-in kinds:
+TraceWeaver 中的每个工作单元都是一个**实体**。三种内置类型：
 
-| Kind | Purpose |
+| 类型 | 用途 |
 |------|---------|
-| `usecase` | High-level goal or project |
-| `plan` | Execution plan under a usecase |
-| `task` | Atomic work item under a plan |
+| `usecase` | 高层目标或项目 |
+| `plan` | usecase 下的执行计划 |
+| `task` | plan 下的原子工作项 |
 
-Entities form a parent–child tree. A `usecase` can own many `plan`s; a `plan` can own many `task`s.
+实体形成父子树结构。一个 `usecase` 可包含多个 `plan`；一个 `plan` 可包含多个 `task`。
 
-### State Machine
+### 状态机
 
-All entities share the same five-state machine:
+所有实体共享同一套五状态机：
 
 ```
 pending ──→ in_progress ──→ review ──→ completed
@@ -54,165 +54,187 @@ pending ──→ in_progress ──→ review ──→ completed
    └──────────────┴────→ rejected ←────────┘
 ```
 
-Valid transitions:
+有效的状态转换：
 
-| From | To |
+| 起始状态 | 目标状态 |
 |------|----|
-| `pending` | `in_progress`, `rejected` |
-| `in_progress` | `review`, `rejected` |
-| `review` | `completed`, `rejected` |
-| `completed` | — (terminal) |
-| `rejected` | — (terminal) |
+| `pending` | `in_progress`、`rejected` |
+| `in_progress` | `review`、`rejected` |
+| `review` | `completed`、`rejected` |
+| `completed` | — （终态） |
+| `rejected` | — （终态） |
 
-Attempting an invalid transition raises a `TransitionError`.
+尝试无效的状态转换会抛出 `TransitionError`。
 
-### Event Bus
+### 事件总线
 
-Every state change and entity mutation emits a typed event onto the in-process `EventBus`. Subscribers can react in real-time. Events are also persisted to the WAL for query and replay.
+每次状态变更和实体修改都会向进程内 `EventBus` 发出有类型的事件。订阅者可实时响应。事件同时持久化到 WAL，支持查询和回放。
 
-### DAG Dependencies
+### DAG 依赖
 
-Entities can declare `depends_on` relationships. TraceWeaver tracks the resulting directed acyclic graph (DAG) and can report which entities are blocked, unblocked, or impacted by a given entity's state change.
+实体可声明 `depends_on` 关系。TraceWeaver 追踪由此形成的有向无环图（DAG），并能报告哪些实体因某实体的状态变更而被阻塞、解除阻塞或受到影响。
 
 ---
 
-## Your First Entity (5 minutes)
+## 第一步：启动 Daemon
 
-### 1. Register a usecase
+Daemon 是 TraceWeaver 的后台进程，负责维护实体状态、事件日志和所有核心功能。
 
 ```bash
-tw register --kind usecase --title "Launch blog redesign" --id blog-v2
+# 在后台启动 Daemon
+tw daemon start
+
+# 验证 Daemon 是否正常运行
+tw status
 ```
 
-Output:
+期望输出：
+
+```
+total: 0  pending: 0  in_progress: 0  review: 0  completed: 0  rejected: 0
+```
+
+如果 Daemon 未能启动，检查 `.traceweaver/daemon.log` 中的错误日志。
+
+---
+
+## 第二步：注册第一个实体
+
+### 注册 usecase
+
+```bash
+tw register --kind usecase --title "启动博客改版" --id blog-v2
+```
+
+输出：
 
 ```
 ✔ Registered usecase blog-v2 [pending]
 ```
 
-### 2. Update state
+### 在其下创建 task
 
 ```bash
-tw update blog-v2 --state in_progress
+tw register --kind task --title "撰写首屏文案" --parent blog-v2 --id task-hero
 ```
 
-Output:
+输出：
+
+```
+✔ Registered task task-hero [pending] → parent: blog-v2
+```
+
+### 查看当前状态
+
+```bash
+# 查看特定实体
+tw status blog-v2
+
+# 查看所有实体汇总
+tw status
+```
+
+---
+
+## 第三步：状态流转
+
+```bash
+# 将 usecase 推进到进行中
+tw update blog-v2 --state in_progress
+
+# 将 task 推进到进行中
+tw update task-hero --state in_progress
+
+# 设置元数据属性
+tw update task-hero --attr assignee=alice --attr priority=high
+
+# 将 task 提交审核
+tw update task-hero --state review
+
+# 完成 task
+tw update task-hero --state completed
+```
+
+每次状态转换都会输出变更记录：
 
 ```
 ✔ blog-v2: pending → in_progress
+✔ task-hero: pending → in_progress
+✔ task-hero: in_progress → review
+✔ task-hero: review → completed
 ```
 
-### 3. Query status
+---
+
+## 第四步：查看事件日志
+
+TraceWeaver 将所有事件持久化到 NDJSON 日志中，Daemon 重启后仍可查询。
+
+### 查询历史事件
 
 ```bash
-tw status blog-v2
+# 查询过去 1 小时内的所有事件
+tw log query --since 1h
+
+# 按实体过滤
+tw log query --since 1h --entity blog-v2
+
+# 按事件类型过滤
+tw log query --since 1h --type state_changed
+
+# 组合过滤（指定实体 + 指定类型）
+tw log query --since 24h --entity task-hero --type state_changed
 ```
 
-Output:
-
-```
-blog-v2  usecase  in_progress
-  tasks:   0 total  0 done
-  updated: 2026-03-23T10:00:00.000Z
-```
-
----
-
-## CLI Reference
-
-### `tw register`
-
-Register a new entity.
-
-```
-tw register --kind <usecase|plan|task> --title <text> [--id <id>] [--parent <id>]
-```
-
-| Flag | Required | Description |
-|------|----------|-------------|
-| `--kind` | yes | Entity kind |
-| `--title` | yes | Human-readable name |
-| `--id` | no | Custom ID (auto-generated if omitted) |
-| `--parent` | no | Parent entity ID |
-
-Example:
+### 实时流式监听事件
 
 ```bash
-tw register --kind task --title "Write hero copy" --parent blog-v2 --id task-hero
-# ✔ Registered task task-hero [pending] → parent: blog-v2
+# 实时监听所有事件（Ctrl+C 退出）
+tw watch
+
+# 输出为 JSON 格式（适合程序化处理）
+tw watch --json
 ```
+
+`tw watch` 会持续输出新产生的事件，非常适合在 AI Agent 开发时观察系统行为。
 
 ---
 
-### `tw update`
+## 第五步：查看指标
 
-Advance entity state or set metadata attributes.
-
-```
-tw update <id> --state <state>
-tw update <id> --attr <key>=<value> [--attr <key>=<value> ...]
-```
-
-Examples:
+TraceWeaver 直接从 OTel Span 历史中推导出指标，无需额外配置。
 
 ```bash
-tw update task-hero --state in_progress
-tw update task-hero --attr assignee=alice --attr priority=high
+# 查看所有实体的指标
+tw metrics
+
+# 按类型过滤（usecase / plan / task）
+tw metrics --type task
+
+# 指定时间窗口（单位：小时）
+tw metrics --type task --window 24
+
+# 输出为 JSON 格式
+tw metrics --type task --window 24 --json
 ```
+
+指标包含：周期时间（cycle time）、失败率（failure rate）、吞吐量（throughput）。
 
 ---
 
-### `tw status`
+## 第六步：依赖图与影响分析
 
-Show entity status, or a global summary when no ID is given.
-
-```
-tw status [<id>]
-```
-
-Global summary output:
-
-```
-total: 12  pending: 3  in_progress: 5  review: 2  completed: 2  rejected: 0
-```
-
----
-
-### `tw events`
-
-Query the event history for an entity or all events.
-
-```
-tw events [--entity <id>] [--type <eventType>] [--limit <n>]
-```
-
-Example:
+### 查看依赖关系图
 
 ```bash
-tw events --entity blog-v2 --limit 5
+# 查看全局依赖图
+tw dag
+
+# 查看特定实体的依赖图
+tw dag --entity blog-v2
 ```
 
----
-
-### `tw inbox`
-
-Read notifications delivered to the local inbox.
-
-```
-tw inbox [--unread] [--limit <n>]
-```
-
----
-
-### `tw dag`
-
-Print the dependency graph for all entities or a specific one.
-
-```
-tw dag [--entity <id>]
-```
-
-Example output:
+示例输出：
 
 ```
 blog-v2 (usecase, in_progress)
@@ -220,186 +242,115 @@ blog-v2 (usecase, in_progress)
        └─ task-hero (task, in_progress)
 ```
 
----
+### 影响分析
 
-### `tw impact`
-
-Show which entities are affected if a given entity changes state.
-
-```
-tw impact <id>
-```
-
----
-
-## Programmatic API (Node.js)
-
-Use TraceWeaver as a library inside your own Node.js application.
-
-```typescript
-import { CommandHandler } from "@traceweaver/core";
-import { EventBus } from "@traceweaver/core";
-import { SqliteAdapter } from "@traceweaver/core";
-
-const bus = new EventBus();
-const store = new SqliteAdapter(".traceweaver/data.db");
-const handler = new CommandHandler({ store, bus });
-
-// Subscribe to all state-change events before issuing commands
-bus.on("entity:state_changed", (event) => {
-  console.log(`[event] ${event.entityId}: ${event.from} → ${event.to}`);
-});
-
-// Register a usecase
-const { id } = await handler.register({
-  kind: "usecase",
-  title: "My first workflow",
-});
-
-// Advance its state
-await handler.updateState(id, "in_progress");
-
-// Read it back
-const entity = await handler.getContext(id);
-console.log(entity.state); // "in_progress"
-```
-
-The `CommandHandler` accepts any storage adapter that implements the `IEntityStore` interface, making it easy to swap SQLite for an in-memory store during tests.
-
----
-
-## AI Agent Integration
-
-TraceWeaver ships a **Model Context Protocol (MCP) server** so AI assistants (Claude Desktop, Cursor, etc.) can manage your workflows natively.
-
-### Enable the MCP server
-
-Set the environment variable before starting your session:
+当制品文件或文档发生变更时，分析哪些实体会受到影响：
 
 ```bash
-TW_MCP=1 tw daemon
-```
+# 分析某个源文件变更的影响范围
+tw impact src/auth.ts
 
-### Claude Desktop configuration
+# 分析文档变更的影响范围
+tw impact ./docs/prd.md
 
-Add the following to `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS):
-
-```json
-{
-  "mcpServers": {
-    "traceweaver": {
-      "command": "tw",
-      "args": ["mcp"],
-      "env": {
-        "TW_DATA_DIR": "/Users/you/.traceweaver"
-      }
-    }
-  }
-}
-```
-
-### Available MCP tools
-
-| Tool | Description |
-|------|-------------|
-| `tw_register` | Register a new entity (kind, title, optional parent/id) |
-| `tw_update_state` | Advance an entity to a new state |
-| `tw_update_attributes` | Set or overwrite metadata key/value pairs |
-| `tw_remove` | Permanently delete an entity |
-| `tw_get_context` | Retrieve an entity and its full child tree |
-| `tw_get_status` | Global progress summary (counts by state) |
-| `tw_get_dag` | Snapshot of the dependency graph |
-| `tw_link_artifact` | Attach an artifact reference (URL, file path, etc.) |
-| `tw_emit_event` | Emit a custom domain event onto the bus |
-| `tw_query_events` | Query persisted event history with optional filters |
-
----
-
-## HTTP API
-
-TraceWeaver includes a Fastify HTTP server for remote or service-to-service access.
-
-### Enable the HTTP server
-
-```bash
-TW_HTTP=1 TW_HTTP_PORT=4000 tw daemon
-```
-
-### Route table
-
-| Method | Path | Description |
-|--------|------|-------------|
-| `POST` | `/entities` | Register a new entity |
-| `PATCH` | `/entities/:id/state` | Update entity state |
-| `PATCH` | `/entities/:id/attrs` | Update entity attributes |
-| `GET` | `/entities/:id` | Get entity and its children |
-| `DELETE` | `/entities/:id` | Remove entity |
-| `GET` | `/status` | Summary stats (counts by state) |
-| `POST` | `/events` | Emit a custom event |
-| `GET` | `/events` | Query event history |
-| `GET` | `/dag` | Dependency graph snapshot |
-| `POST` | `/webhook` | Receive inbound webhook notifications |
-
-### Curl examples
-
-**Register an entity:**
-
-```bash
-curl -s -X POST http://localhost:4000/entities \
-  -H "Content-Type: application/json" \
-  -d '{"kind":"usecase","title":"Blog redesign","id":"blog-v2"}' | jq
-```
-
-**Advance state:**
-
-```bash
-curl -s -X PATCH http://localhost:4000/entities/blog-v2/state \
-  -H "Content-Type: application/json" \
-  -d '{"state":"in_progress"}' | jq
-```
-
-**Query event history:**
-
-```bash
-curl -s "http://localhost:4000/events?entityId=blog-v2&limit=10" | jq
-```
-
-**Get dependency graph:**
-
-```bash
-curl -s http://localhost:4000/dag | jq
-```
-
-**Inbound webhook (receive external notification):**
-
-```bash
-curl -s -X POST http://localhost:4000/webhook \
-  -H "Content-Type: application/json" \
-  -d '{"source":"github","event":"push","ref":"refs/heads/main"}' | jq
+# 输出为 JSON 格式
+tw impact src/auth.ts --json
 ```
 
 ---
 
-## Notification Rules
+## 第七步：Harness 约束文件
 
-TraceWeaver's **NotifyEngine** fires rules whenever entity events occur. Rules are declared in `.traceweaver/config.yaml`.
+Harness 是以 Markdown + YAML frontmatter 格式编写的约束文件，定义实体满足"完成"条件的规则。Daemon 会在实体到达指定状态时自动执行这些约束。
 
-### Example config
+### 创建 Harness 文件
+
+在项目中创建 `.traceweaver/harness/` 目录，然后创建约束文件：
+
+```bash
+mkdir -p .traceweaver/harness
+```
+
+创建 `.traceweaver/harness/test-coverage.md`：
+
+```markdown
+---
+id: test-coverage
+applies_to:
+  - task
+trigger_on:
+  - review
+  - completed
+---
+# 测试覆盖率约束
+
+所有任务必须包含测试文件。检查 artifact_refs 中是否至少有一项
+type 为 "test" 的条目。
+
+RESULT: 测试存在则通过，否则失败。
+```
+
+### 管理和运行 Harness
+
+```bash
+# 列出所有可用的 Harness
+tw harness list
+
+# 查看某个 Harness 的详情
+tw harness show test-coverage
+
+# 对某个实体手动运行 Harness
+tw harness run task-hero --harness-id test-coverage
+
+# 输出为 JSON 格式
+tw harness list --json
+tw harness run task-hero --harness-id test-coverage --json
+```
+
+### 启用 LLM 驱动的约束评估
+
+```bash
+export ANTHROPIC_API_KEY=sk-ant-...
+```
+
+设置该密钥后，当实体到达 `trigger_on` 中列出的状态时，TriggerExecutor 会自动调用 LLM 评估约束：
+- **失败** → 实体自动转换为 `rejected`，并写入收件箱通知
+- **通过** → 实体继续其生命周期
+
+---
+
+## 第八步：通知收件箱
+
+```bash
+# 查看所有通知
+tw inbox
+
+# 只查看未读通知
+tw inbox --unread
+
+# 限制显示数量
+tw inbox --limit 10
+
+# 输出为 JSON 格式
+tw inbox --json
+```
+
+在 `.traceweaver/config.yaml` 中配置通知规则：
 
 ```yaml
 # .traceweaver/config.yaml
 
 notifications:
-  - name: "Alert on task rejection"
+  - name: "任务被拒绝时告警"
     match:
       kind: task
       event: state_changed
       to: rejected
     deliver:
       - channel: inbox
-        message: "Task {{entityId}} was rejected."
+        message: "任务 {{entityId}} 已被拒绝。"
 
-  - name: "Webhook on usecase completion"
+  - name: "usecase 完成时发送 Webhook"
     match:
       kind: usecase
       event: state_changed
@@ -410,199 +361,79 @@ notifications:
         method: POST
 ```
 
-### Delivery channels
+---
 
-| Channel | Description |
-|---------|-------------|
-| `inbox` | Writes to the local inbox; readable via `tw inbox` |
-| `webhook` | POSTs a JSON payload to the configured URL with automatic retry |
+## 下一步
 
-### Rule matching syntax
+恭喜！你已完成 TraceWeaver 的基础操作。接下来可以进一步探索：
 
-Each rule's `match` block supports:
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `kind` | string | Entity kind (`usecase`, `plan`, `task`, or `*`) |
-| `event` | string | Event type (e.g., `state_changed`, `attribute_updated`) |
-| `to` | string | Target state (for `state_changed` events) |
-| `entityId` | string | Match a specific entity ID |
+- **CLI 命令大全** — 查看 `tw --help` 或各子命令的 `tw <命令> --help`
+- **示例代码** — 浏览 [`examples/src/`](../examples/src/) 目录，包含覆盖所有主要功能的可运行示例：
+  - `01-basic-entity-lifecycle.ts` — 基础实体生命周期
+  - `04-full-flow-research-project.ts` — 完整研发项目模拟
+  - `06-full-flow-constraint-validation.ts` — LLM 驱动的约束验证
+  - `11-full-chain-autonomous-loop.ts` — 自主 Agent 闭环
+- **HTTP API** — 启动 HTTP Server 接入 CI/CD 流水线：
+  ```bash
+  TW_HTTP_PORT=4321 tw daemon start
+  ```
+- **MCP Server 集成** — 将 TraceWeaver 接入 Claude Desktop 或其他支持 MCP 协议的 AI 工具：
+  ```bash
+  TW_MCP_STDIO=1 tw daemon --mcp
+  ```
+- **架构文档** — 阅读 [docs/ARCHITECTURE.md](./ARCHITECTURE.md) 了解模块边界（`core`、`cli`、`http`、`mcp`、`notify`、`otel`）
 
 ---
 
-## Constraint Validation
+## 常见问题排查
 
-TraceWeaver can evaluate **Markdown constraint harnesses** against entity context using an LLM, catching policy violations before state transitions complete.
+### Daemon 未启动
 
-### What is a constraint file?
+**症状：** `tw` 命令挂起或返回 "daemon unavailable"。
 
-A constraint file is a Markdown document that describes rules your entities must satisfy. TraceWeaver sends the entity's full context plus the constraint document to the LLM and receives a structured pass/fail verdict.
+**解决步骤：**
 
-### Example constraint file
-
-```markdown
-<!-- .traceweaver/constraints/task-done.md -->
-
-# Task Completion Constraints
-
-## Rules
-
-1. A task MUST have an `assignee` attribute set before moving to `review`.
-2. A task MUST NOT move to `completed` if its parent plan is still `pending`.
-3. A task title MUST NOT be empty or generic (e.g., "Untitled", "TODO").
-
-## Instructions
-
-Evaluate the entity context below against the rules above.
-Return JSON: { "pass": boolean, "violations": string[] }
-```
-
-### Linking constraints to entities
-
-```bash
-tw update task-hero --attr constraint=".traceweaver/constraints/task-done.md"
-```
-
-Or via the API:
-
-```bash
-curl -s -X PATCH http://localhost:4000/entities/task-hero/attrs \
-  -H "Content-Type: application/json" \
-  -d '{"constraint":".traceweaver/constraints/task-done.md"}' | jq
-```
-
-### Required environment variable
-
-```bash
-export TW_ANTHROPIC_API_KEY=sk-ant-...
-```
-
-Without this variable, constraint evaluation is skipped and a warning is logged.
-
----
-
-## OpenTelemetry Export
-
-TraceWeaver emits OpenTelemetry spans for every entity lifecycle event.
-
-### Span lifecycle
-
-| Span event | Triggered when |
-|------------|---------------|
-| `entity.created` | Entity is registered |
-| `entity.state_changed` | State transition succeeds |
-| `entity.attribute_updated` | Attributes are modified |
-| `entity.removed` | Entity is deleted |
-
-Each span carries attributes: `entity.id`, `entity.kind`, `entity.state`, `entity.parent_id`.
-
-### OTLP HTTP export
-
-```bash
-export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
-export OTEL_SERVICE_NAME=traceweaver
-tw daemon
-```
-
-TraceWeaver uses the OTLP/HTTP exporter by default. Point it at any OTLP-compatible collector (Jaeger, Grafana Tempo, Honeycomb, etc.).
-
-### Environment variables
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | `http://localhost:4318` | OTLP collector endpoint |
-| `OTEL_SERVICE_NAME` | `traceweaver` | Service name in traces |
-| `OTEL_TRACES_SAMPLER` | `always_on` | Sampling strategy |
-
----
-
-## Examples
-
-All examples live in `examples/src/` and can be run directly from the repo root.
-
-| File | Category | Demonstrates | Run |
-|------|----------|-------------|-----|
-| `01-basic-entity-lifecycle.ts` | Basic | Register → update → complete a task | `npm run example:01` |
-| `02-basic-events.ts` | Basic | EventBus subscribe/publish patterns | `npm run example:02` |
-| `03-basic-dag-dependencies.ts` | Basic | DAG with `depends_on` links | `npm run example:03` |
-| `04-full-flow-research-project.ts` | Full Flow | Complete R&D project simulation end-to-end | `npm run example:04` |
-| `05-full-flow-notify-engine.ts` | Full Flow | Notification rules + local inbox delivery | `npm run example:05` |
-| `06-full-flow-constraint-validation.ts` | Full Flow | LLM-powered constraint checking on transitions | `npm run example:06` |
-| `07-edge-invalid-transitions.ts` | Edge Case | `TransitionError` handling for illegal moves | `npm run example:07` |
-| `08-edge-propagation-bubble-up.ts` | Edge Case | Automatic parent state propagation from children | `npm run example:08` |
-| `09-edge-ring-buffer-overflow.ts` | Edge Case | Ring buffer circular overflow under high event volume | `npm run example:09` |
-| `10-edge-wal-recovery.ts` | Edge Case | WAL-based crash recovery restoring consistent state | `npm run example:10` |
-
-You can also run any example directly without npm scripts:
-
-```bash
-npx tsx examples/src/01-basic-entity-lifecycle.ts
-```
-
----
-
-## Troubleshooting
-
-### Daemon not starting
-
-**Symptom:** `tw` commands hang or return "daemon unavailable".
-
-**Steps:**
-
-1. Check whether the daemon process is running:
+1. 检查 Daemon 进程是否正在运行：
    ```bash
    ps aux | grep tw
    ```
-2. Start it explicitly:
+2. 显式启动 Daemon：
    ```bash
-   tw daemon &
+   tw daemon start
    ```
-3. Check logs in `.traceweaver/daemon.log`.
+3. 查看 `.traceweaver/daemon.log` 中的日志。
 
----
+### Socket 地址已被占用
 
-### Socket already in use
+**症状：** `Error: EADDRINUSE — address already in use`。
 
-**Symptom:** `Error: EADDRINUSE — address already in use`.
+**解决步骤：**
 
-**Steps:**
-
-1. Identify the process holding the socket:
+1. 找出占用 Socket 的进程：
    ```bash
    lsof -i :<port>
    ```
-2. Kill it:
+2. 终止该进程：
    ```bash
    kill -9 <PID>
    ```
-3. Remove the stale socket file if present:
+3. 删除残留的 Socket 文件：
    ```bash
    rm -f /tmp/traceweaver.sock
    ```
 
----
+### WAL 损坏恢复
 
-### WAL corruption recovery
+**症状：** 启动时出现 `WAL checksum mismatch` 或实体丢失。
 
-**Symptom:** Startup fails with `WAL checksum mismatch` or entities appear missing.
+**解决步骤：**
 
-**Steps:**
-
-1. Run the recovery example to understand the WAL repair process:
+1. 运行恢复示例以了解 WAL 修复流程：
    ```bash
    npm run example:10
    ```
-2. Trigger manual WAL recovery:
+2. 触发手动 WAL 恢复：
    ```bash
    tw recover --wal .traceweaver/wal.log
    ```
-3. If recovery fails, restore from the last clean snapshot in `.traceweaver/snapshots/`.
-
----
-
-## Next Steps
-
-- Browse the [examples/](../examples/src/) directory for runnable code covering every major feature.
-- Read the architecture overview in [docs/ARCHITECTURE.md](./ARCHITECTURE.md) (if present).
-- Explore the [packages/](../packages/) directory to understand the module boundaries (`core`, `cli`, `http`, `mcp`, `notify`, `otel`).
-- File issues or contribute at the project repository.
+3. 如果恢复失败，从 `.traceweaver/snapshots/` 中的最近一次干净快照恢复。
