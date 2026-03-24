@@ -325,7 +325,7 @@ export class CommandHandler {
     await mkdir(pendingDir, { recursive: true })
     await mkdir(inProgressDir, { recursive: true })
     let files: string[]
-    try { files = await readdir(pendingDir) } catch { return null }
+    try { files = await readdir(pendingDir) } catch { return null /* ENOENT: queue not yet created */ }
     const jsonFiles = files.filter(f => f.endsWith('.json')).sort()
     if (jsonFiles.length === 0) return null
     const file = jsonFiles[0]
@@ -343,7 +343,7 @@ export class CommandHandler {
     const doneDir = join(params.queueDir, 'done')
     await mkdir(doneDir, { recursive: true })
     let files: string[]
-    try { files = await readdir(inProgressDir) } catch { return { ok: false } }
+    try { files = await readdir(inProgressDir) } catch { return { ok: false } /* ENOENT: in-progress dir not yet created */ }
     const target = files.find(f => f.includes(params.remId))
     if (!target) return { ok: false }
     await rename(join(inProgressDir, target), join(doneDir, target))
