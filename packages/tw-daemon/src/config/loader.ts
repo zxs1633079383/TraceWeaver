@@ -98,6 +98,15 @@ export interface RemediationConfig {
   trigger_from_states?: string[]
 }
 
+export interface ReportConfig {
+  /** Scheduled generation time in "HH:MM" format, e.g. "09:00" */
+  schedule?: string
+  /** Report output directory. Default: ~/.traceweaver/reports/ */
+  output_dir?: string
+  /** Traces to include: 'all' or a list of specific trace_ids */
+  traces?: 'all' | string[]
+}
+
 export interface TwConfig {
   store_dir?: string
   socket_path?: string
@@ -108,6 +117,7 @@ export interface TwConfig {
   harness?: HarnessConfig
   integrations?: IntegrationsConfig
   remediation?: RemediationConfig
+  report?: ReportConfig
 }
 
 // ── Loader ─────────────────────────────────────────────────────────────────
