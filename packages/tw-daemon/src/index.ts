@@ -23,6 +23,10 @@ import { ConsoleExporter } from './otel/exporter-console.js'
 import { OtlpHttpExporter } from './otel/exporter-http.js'
 import { OtlpGrpcExporter } from './otel/exporter-grpc.js'
 import type { NotifyRule } from './notify/engine.js'
+import { homedir } from 'node:os'
+import { TraceQueryEngine } from './otel/trace-query.js'
+import { ReportGenerator } from './report/report-generator.js'
+import { ReportScheduler } from './report/report-scheduler.js'
 
 const PROJECT_ROOT = process.cwd()
 const STORE_DIR    = process.env.TW_STORE ?? join(PROJECT_ROOT, '.traceweaver')
@@ -61,6 +65,44 @@ async function main() {
   const handler = new CommandHandler({ storeDir: STORE_DIR, eventBus, spanManager, eventLog })
   await handler.init()
 
+  const feedbackLog = new FeedbackLog(join(STORE_DIR, 'feedback', 'feedback.ndjson'))
+  feedbackLog.load()
+
+  const traceQuery = new TraceQueryEngine({
+    spanManager,
+    getAllEntities: () => handler.getAllEntities(),
+    getEntity: (id: string) => handler.getEntityById(id),
+    feedbackLog,
+  })
+
+  const reportOutputDir = config?.report?.output_dir ?? join(homedir(), '.traceweaver', 'reports')
+  const reportGenerator = new ReportGenerator({
+    traceQuery,
+    eventLog,
+    feedbackLog,
+    outputDir: reportOutputDir,
+  })
+
+  let reportScheduler: ReportScheduler | null = null
+  if (config?.report?.schedule) {
+    reportScheduler = new ReportScheduler({
+      scheduleTime: config.report.schedule,
+      generate: async () => {
+        const today = new Date().toISOString().slice(0, 10)
+        await reportGenerator.generate({ all: true, date: today })
+      },
+      hasReportTodayInEventLog: async () => {
+        const today = new Date().toISOString().slice(0, 10)
+        const events = eventLog.query({
+          event_type: 'report.generated',
+          since: new Date(today).toISOString(),
+        })
+        return events.length > 0
+      },
+    })
+    reportScheduler.start()
+  }
+
   const inbox = new InboxAdapter(join(STORE_DIR, 'inbox'))
   const defaultRules: NotifyRule[] = [
     { event: 'entity.state_changed', state: 'rejected' },
@@ -83,9 +125,6 @@ async function main() {
 
   const harnessLoader = new HarnessLoader(join(STORE_DIR, 'harness'))
   await harnessLoader.scan()
-
-  const feedbackLog = new FeedbackLog(join(STORE_DIR, 'feedback', 'feedback.ndjson'))
-  feedbackLog.load()
 
   const harnessValidator = new HarnessValidator(harnessLoader, feedbackLog)
 
@@ -194,6 +233,8 @@ async function main() {
     triggerExecutor,
     feedbackLog,
     harnessValidator,
+    traceQuery,
+    reportGenerator,
   })
   await server.start()
 
@@ -215,6 +256,7 @@ async function main() {
 
   async function cleanup(s: IpcServer, eb: EventBus) {
     clearInterval(watchdog)
+    reportScheduler?.stop()
     triggerExecutor.stop()
     notifyEngine.stop()
     await fsWatcher.stop()
