@@ -10,6 +10,8 @@ import type { HarnessLoader } from './harness/loader.js'
 import type { TriggerExecutor } from './trigger/executor.js'
 import type { FeedbackLog } from './feedback/feedback-log.js'
 import type { HarnessValidator } from './harness/validator.js'
+import type { TraceQueryEngine } from './otel/trace-query.js'
+import type { ReportGenerator } from './report/report-generator.js'
 
 export interface IpcServerOptions {
   inbox?: InboxAdapter
@@ -19,6 +21,8 @@ export interface IpcServerOptions {
   triggerExecutor?: TriggerExecutor
   feedbackLog?: FeedbackLog
   harnessValidator?: HarnessValidator
+  traceQuery?: TraceQueryEngine
+  reportGenerator?: ReportGenerator
 }
 
 export class IpcServer {
@@ -30,6 +34,8 @@ export class IpcServer {
   private readonly triggerExecutor?: TriggerExecutor
   private readonly feedbackLog?: FeedbackLog
   private readonly harnessValidator?: HarnessValidator
+  private readonly traceQuery?: TraceQueryEngine
+  private readonly reportGenerator?: ReportGenerator
 
   constructor(
     private readonly socketPath: string,
@@ -44,6 +50,8 @@ export class IpcServer {
     this.triggerExecutor = opts?.triggerExecutor
     this.feedbackLog = opts?.feedbackLog
     this.harnessValidator = opts?.harnessValidator
+    this.traceQuery = opts?.traceQuery
+    this.reportGenerator = opts?.reportGenerator
   }
 
   async start(): Promise<void> {
@@ -193,6 +201,32 @@ export class IpcServer {
         const { rem_id, queue_dir } = params as { rem_id: string; queue_dir: string }
         if (!rem_id || !queue_dir) throw Object.assign(new Error('Missing required params: rem_id, queue_dir'), { code: 'INVALID_PARAMS' })
         data = await this.handler.remediationDone({ remId: rem_id, queueDir: queue_dir })
+      } else if (method === 'trace_spans') {
+        if (!this.traceQuery) throw Object.assign(new Error('TraceQueryEngine not available'), { code: 'NOT_AVAILABLE' })
+        const { trace_id, entity_id } = params as { trace_id?: string; entity_id?: string }
+        const resolvedId = trace_id ?? (entity_id ? this.traceQuery.findTraceId(entity_id) : undefined)
+        if (!resolvedId) throw Object.assign(new Error('trace_not_found'), { code: 'NOT_FOUND' })
+        const tree = this.traceQuery.buildSpanTree(resolvedId)
+        if (!tree) throw Object.assign(new Error('trace_not_found'), { code: 'NOT_FOUND' })
+        data = { trace_id: resolvedId, tree }
+      } else if (method === 'trace_info') {
+        if (!this.traceQuery) throw Object.assign(new Error('TraceQueryEngine not available'), { code: 'NOT_AVAILABLE' })
+        const { trace_id, entity_id } = params as { trace_id?: string; entity_id?: string }
+        const resolvedId = trace_id ?? (entity_id ? this.traceQuery.findTraceId(entity_id) : undefined)
+        if (!resolvedId) throw Object.assign(new Error('trace_not_found'), { code: 'NOT_FOUND' })
+        const info = this.traceQuery.buildTraceInfo(resolvedId)
+        if (!info) throw Object.assign(new Error('trace_not_found'), { code: 'NOT_FOUND' })
+        data = info
+      } else if (method === 'report_generate') {
+        if (!this.reportGenerator) throw Object.assign(new Error('ReportGenerator not available'), { code: 'NOT_AVAILABLE' })
+        const { trace_id, all } = params as { trace_id?: string; all?: boolean }
+        const paths = await this.reportGenerator.generate({ traceId: trace_id, all })
+        data = { paths }
+      } else if (method === 'report_list') {
+        if (!this.reportGenerator) throw Object.assign(new Error('ReportGenerator not available'), { code: 'NOT_AVAILABLE' })
+        const { date } = params as { date?: string }
+        const reports = await this.reportGenerator.listReports(date)
+        data = { reports }
       } else {
         throw Object.assign(new Error(`Unknown method: ${method}`), { code: 'UNKNOWN_METHOD' })
       }
