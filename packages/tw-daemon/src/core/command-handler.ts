@@ -354,6 +354,10 @@ export class CommandHandler {
     return this.registry.getAll()
   }
 
+  getEntityById(id: string): Entity | undefined {
+    return this.registry.get(id)
+  }
+
   resolveImpact(filePath: string, section?: string): ImpactResult {
     return this.impactResolver.resolve(filePath, section)
   }
