@@ -17,6 +17,7 @@ import { feedbackCommand }    from './commands/feedback.js'
 import { taskmasterCommand } from './commands/taskmaster.js'
 import { diagnoseCommand }   from './commands/diagnose.js'
 import { traceCommand }     from './commands/trace.js'
+import { reportCommand }    from './commands/report.js'
 
 const program = new Command()
 program
@@ -41,5 +42,6 @@ program.addCommand(feedbackCommand())
 program.addCommand(taskmasterCommand())
 program.addCommand(diagnoseCommand())
 program.addCommand(traceCommand())
+program.addCommand(reportCommand())
 
 program.parseAsync(process.argv).catch(e => { console.error(e); process.exit(1) })
