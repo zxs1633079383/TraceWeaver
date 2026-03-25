@@ -43,6 +43,9 @@ tw status --json
 tw log query --since 1h
 tw metrics --json
 tw harness list --json
+tw trace spans --entity-id=<id>
+tw trace info  --trace-id=<id> --json
+tw report daily --all
 
 tw daemon stop
 ```

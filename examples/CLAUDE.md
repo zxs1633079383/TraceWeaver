@@ -42,13 +42,22 @@
 ### 基础验证
 
 ```bash
-npm run run:11 --workspace=examples    # 全链路闭环 Demo 必须通过
-npm run run:all --workspace=examples   # 所有示例必须通过
+npm run run:11 --workspace=examples    # 全链路闭环（核心验收，必须通过）
+npm run run:12 --workspace=examples    # Jaeger 导出验证（需 telepresence 或 port-forward）
+npm run run:13 --workspace=examples    # TaskMaster 联动验证
+npm run run:14 --workspace=examples    # Trace & Report 命令闭环验证
+npm run run:all --workspace=examples   # 01–14 全部（12/13 需 Jaeger 可达）
 ```
 
-### 示例 11 是最终验收标准
+### 示例验收标准
 
-`11-full-chain-autonomous-loop.ts` 覆盖所有功能模块和边界条件。
+| 示例 | 验收范围 |
+|------|---------|
+| 11 | 全链路闭环：所有功能模块 + 边界条件（核心验收） |
+| 12 | OTLP/gRPC 导出：OtlpGrpcExporter flush → Jaeger |
+| 13 | TaskMaster 联动：hook 钩子 + constraint_refs + cascadeUpdate |
+| 14 | Trace & Report 闭环：TraceQueryEngine（live + reconstructed）+ ReportGenerator 原子写入 + `_ai_context` + EventLog file-ref |
+
 如果 Example 11 失败，定位是哪个 Phase：
 
 ```
@@ -91,4 +100,7 @@ Phase J  WAL 恢复
 | 08 | edge-propagation-bubble-up | 传递影响冒泡 |
 | 09 | edge-ring-buffer-overflow | RingBuffer 溢出保护 |
 | 10 | edge-wal-recovery | WAL 崩溃恢复 |
-| 11 | full-chain-autonomous-loop | **全链路闭环（验收标准）** |
+| 11 | full-chain-autonomous-loop | **全链路闭环（核心验收标准）** |
+| 12 | jaeger-full-trace | Jaeger OTLP/gRPC 全链路 Trace 导出验证 |
+| 13 | taskmaster-lifecycle-bridge | TaskMaster × TraceWeaver 全链路闭环（hook 联动 + constraint_refs） |
+| 14 | trace-report-e2e | TraceQueryEngine（live + reconstructed）+ ReportGenerator 原子写入 + EventLog file-ref |

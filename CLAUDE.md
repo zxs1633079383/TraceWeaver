@@ -18,10 +18,15 @@ FsWatcher（config.watch.dirs）
     ↓ file.changed
 ImpactResolver（file → entity 反向索引）
     ↓ artifact.modified（per entity）
-TriggerExecutor（harness trigger_on 匹配）
+TriggerExecutor（harness trigger_on 匹配 + constraint_refs 过滤）
     ↓ ConstraintEvaluator（LLM）
-    ↓ auto-reject / inbox
+    ↓ auto-reject → RemediationEngine（修复队列）
+    ↓ FeedbackLog（harness 评估历史）
+    ↓ NotifyEngine → InboxAdapter
 EventLog（NDJSON，可查询）
+SpanManager → OtlpGrpcExporter → Jaeger（OTLP/gRPC）
+TraceQueryEngine（SpanManager live + EntityRegistry fallback）→ tw trace spans/info
+ReportGenerator（四来源聚合）→ tw report daily/list/show
 ```
 
 ---
@@ -89,7 +94,7 @@ tw taskmaster hook status-changed --tm-id=<n> --status=<status>
 <type>(<scope>): <subject>
 
 type:   feat | fix | refactor | docs | test | chore | perf
-scope:  daemon | cli | types | watcher | config | harness | examples | docs
+scope:  daemon | cli | types | watcher | config | harness | trigger | remediation | examples | docs | report | trace
 ```
 
 每次提交只做一件事。跨模块变更按顺序拆分：types → daemon → cli → test → docs。

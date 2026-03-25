@@ -41,7 +41,10 @@ tw <noun> [<subcommand>] [args] [options]
 
 noun:       daemon | status | register | update | events | dag
             impact | log | metrics | harness | watch | inbox
+            taskmaster | diagnose | sync | trace | report
 subcommand: daemon start|stop|restart  /  log query  /  harness list|show|run
+            taskmaster hook|sync  /  diagnose  /  sync
+            trace spans|info  /  report daily|list|show
 ```
 
 新增命令必须：
@@ -93,6 +96,7 @@ tw daemon stop
 ### 已有输出工具
 
 `src/output/formatter.ts` — 表格/树状输出工具，新命令优先复用。
+`src/output/trace-renderer.ts` — Span 树状文本渲染（`renderSpanTree` / `renderTraceInfo`），供 `tw trace` 命令使用。
 
 ### 禁止事项
 
@@ -109,6 +113,7 @@ tw daemon stop
 |------|------|------|
 | `get_status` | `{}` | 实体汇总 |
 | `register` | RegisterParams | 注册实体 |
+| `remove` | `{id}` | 删除实体（慎用） |
 | `update_state` | `{id, state}` | 更新状态 |
 | `update_attributes` | `{id, attributes}` | 更新属性 |
 | `query_events` | `{entity_id?, since?, limit?}` | 查询事件 |
@@ -128,3 +133,7 @@ tw daemon stop
 | `cascade_update` | `{id, attributes, cascade}` | 级联更新实体及下游 |
 | `remediation_next` | `{queue_dir}` | 取下一个待修复队列项 |
 | `remediation_done` | `{rem_id, queue_dir}` | 标记修复完成 |
+| `trace_spans` | `{ trace_id?, entity_id? }` | Span 树（双入口，trace_id 优先）|
+| `trace_info` | `{ trace_id?, entity_id? }` | 完整链路详情（含 `_ai_context`，AI Agent 可消费）|
+| `report_generate` | `{ trace_id?, all? }` | 生成日报，返回文件路径列表 |
+| `report_list` | `{ date? }` | 列出已生成报告的元数据（YYYY-MM-DD 过滤）|
