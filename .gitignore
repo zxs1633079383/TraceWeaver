@@ -21,3 +21,4 @@ packages/*/src/**/*.d.ts.map
 
 # lockfile (managed separately)
 package-lock.json
+.worktrees/
