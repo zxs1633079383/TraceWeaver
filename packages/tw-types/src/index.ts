@@ -130,6 +130,7 @@ export type TwEventType =
   | 'git.commit'
   | 'file.changed'
   | 'entity.upstream_changed'
+  | 'report.generated'
 
 export interface TwEvent {
   id: string            // uuid
@@ -257,4 +258,59 @@ export interface ConstraintValidationResult {
   result: ConstraintCheckStatus
   checked_at: string
   refs_checked: ConstraintCheckResult[]
+}
+
+// ─── Trace Query ──────────────────────────────────────────────────────────────
+
+export interface SpanTreeNode {
+  entity_id: string
+  entity_type: EntityType
+  state: EntityState                // from EntityRegistry (authoritative), NOT SpanMeta.status
+  span_id: string                   // after daemon restart = entity_id (reconstructed mode)
+  trace_id: string
+  parent_span_id?: string
+  start_time: string
+  end_time?: string
+  duration_ms?: number              // undefined in reconstructed mode
+  status: 'OK' | 'ERROR' | 'UNSET'
+  source: 'live' | 'reconstructed' // SpanManager vs EntityRegistry fallback
+  events: SpanEvent[]              // in reconstructed mode, rebuilt from EventLog (can be empty array)
+  harness_results?: Array<{
+    harness_id: string
+    result: 'pass' | 'fail'
+    reason?: string
+  }>
+  children: SpanTreeNode[]
+}
+
+export interface TraceInfo {
+  trace_id: string
+  root: SpanTreeNode
+  summary: {
+    total: number
+    completed: number
+    in_progress: number
+    pending: number
+    rejected: number
+    blocked: string[]
+    harness_failures: Array<{
+      entity_id: string
+      harness_id: string
+      reason?: string
+    }>
+  }
+  _ai_context: {
+    one_line: string       // deterministic template, no LLM call
+    next_actions: string[]
+    error_refs: string[]
+  }
+}
+
+// ─── Report ───────────────────────────────────────────────────────────────────
+
+export interface ReportMeta {
+  date: string          // YYYY-MM-DD
+  trace_id: string
+  path: string
+  generated_at: string  // ISO8601
 }
