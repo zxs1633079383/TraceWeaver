@@ -24,7 +24,6 @@ function makeTree(): SpanTreeNode {
         span_id: 'span-3', trace_id: 'trace-abc', parent_span_id: 'span-1',
         start_time: '2026-03-25T08:00:00Z', status: 'ERROR', source: 'live',
         events: [], children: [],
-        harness_results: [{ harness_id: 'task-needs-test', result: 'fail', reason: '未发现测试文件引用' }],
       },
     ],
   }
@@ -52,7 +51,7 @@ describe('ReportGenerator', () => {
         buildTraceInfo: (id: string) => id === 'trace-abc' ? {
           trace_id: 'trace-abc',
           root: tree,
-          summary: { total: 3, completed: 2, in_progress: 0, pending: 0, rejected: 1, blocked: [], harness_failures: [] },
+          summary: { total: 3, completed: 2, in_progress: 0, pending: 0, rejected: 1, blocked: [] },
           _ai_context: { one_line: '3 实体中 2 完成', next_actions: [], error_refs: [] },
         } : null,
       } as any,
@@ -60,7 +59,6 @@ describe('ReportGenerator', () => {
         append: (e: any) => { appendedEvents.push(e) },
         query: () => [],
       } as any,
-      feedbackLog: { getAllSummaries: () => [] } as any,
       outputDir: tmpDir,
     })
   }
@@ -116,7 +114,6 @@ describe('ReportGenerator', () => {
         buildTraceInfo: () => null,
       } as any,
       eventLog: { append: () => {}, query: () => [] } as any,
-      feedbackLog: { getAllSummaries: () => [] } as any,
       outputDir: tmpDir,
     })
     const listed = await gen3.listReports('2026-03-25')

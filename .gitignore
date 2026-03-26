@@ -22,3 +22,9 @@ packages/*/src/**/*.d.ts.map
 # lockfile (managed separately)
 package-lock.json
 .worktrees/
+
+# Documentation (internal-only, not committed)
+# Only README.md and QUICKSTART.md are tracked
+**/*.md
+!README.md
+!QUICKSTART.md

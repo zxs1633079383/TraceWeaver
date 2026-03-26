@@ -6,9 +6,7 @@
  * 验证点：
  *  ✅ TraceId 一致性     — UseCase → Plan → Task 共享同一 trace_id
  *  ✅ cascadeUpdate      — UseCase 更新级联通知所有下游 Plan/Task
- *  ✅ RemediationEngine  — 任务 rejected → 自动入队 pending/
- *  ✅ 熔断器             — 超过 maxAttempts 后不再入队
- *  ✅ 去重               — 同一 rejection ts 只入队一次
+ *  ✅ 手动拒绝           — 无测试的任务手动 rejected
  *  ✅ diagnose 输出模拟  — 打印 entity 状态 + span events + 失败原因
  *  ✅ TaskMaster 数据桥接 — 从 tasks.json 批量注册 TW 实体
  *  ✅ Jaeger 导出        — 所有 span（含真实任务名/trace_id）写入 Jaeger
@@ -32,7 +30,7 @@
  *   Operation = tw.usecase
  */
 
-import { mkdtemp, rm, mkdir, writeFile, readdir } from 'node:fs/promises'
+import { mkdtemp, rm, mkdir } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -42,13 +40,8 @@ import { CommandHandler } from '../../packages/tw-daemon/src/core/command-handle
 import { EventBus } from '../../packages/tw-daemon/src/core/event-bus/event-bus.js'
 import { SpanManager } from '../../packages/tw-daemon/src/otel/span-manager.js'
 import { EventLog } from '../../packages/tw-daemon/src/log/event-log.js'
-import { HarnessLoader } from '../../packages/tw-daemon/src/harness/loader.js'
-import { TriggerExecutor } from '../../packages/tw-daemon/src/trigger/executor.js'
-import { ConstraintEvaluator } from '../../packages/tw-daemon/src/constraint/evaluator.js'
 import { NotifyEngine } from '../../packages/tw-daemon/src/notify/engine.js'
 import { InboxAdapter } from '../../packages/tw-daemon/src/notify/inbox.js'
-import { FeedbackLog } from '../../packages/tw-daemon/src/feedback/feedback-log.js'
-import { RemediationEngine } from '../../packages/tw-daemon/src/remediation/remediation-engine.js'
 import { ExporterRegistry } from '../../packages/tw-daemon/src/otel/exporter-registry.js'
 import { OtlpGrpcExporter } from '../../packages/tw-daemon/src/otel/exporter-grpc.js'
 import { ConsoleExporter } from '../../packages/tw-daemon/src/otel/exporter-console.js'
@@ -102,20 +95,6 @@ function loadTasks(): TmTask[] {
   return data.master.tasks
 }
 
-function tmStatusToTwState(status: string): 'pending' | 'in_progress' | 'review' | 'completed' | 'rejected' {
-  const map: Record<string, 'pending' | 'in_progress' | 'review' | 'completed' | 'rejected'> = {
-    'pending': 'pending', 'in-progress': 'in_progress', 'review': 'review',
-    'done': 'completed', 'deferred': 'pending', 'cancelled': 'rejected',
-  }
-  return map[status] ?? 'pending'
-}
-
-// ── 模拟 LLM：无 APPROVED → fail（触发自动拒绝）───────────────────────────
-async function mockLlm(prompt: string): Promise<string> {
-  if (prompt.includes('APPROVED')) return 'RESULT: pass\n所有约束已满足。'
-  return 'RESULT: fail\n该任务 artifact_refs 中缺少 type=test 的测试文件条目。需要补充单元测试后再提交审核。'
-}
-
 // ── 主流程 ──────────────────────────────────────────────────────────────────
 async function main(): Promise<void> {
   console.log(`\n${C.bold}TraceWeaver — TaskMaster 全链路闭环验证 (Example 13)${C.reset}`)
@@ -125,13 +104,9 @@ async function main(): Promise<void> {
 
   // ── 临时目录 ────────────────────────────────────────────────────────────
   const storeDir     = await mkdtemp(join(tmpdir(), 'tw-example-13-'))
-  const harnessDir   = join(storeDir, 'harness')
   const inboxDir     = join(storeDir, 'inbox')
-  const queueDir     = join(storeDir, 'remediation-queue')
   const logPath      = join(storeDir, 'events.ndjson')
-  const feedbackPath = join(storeDir, 'feedback', 'feedback.ndjson')
-  await mkdir(harnessDir, { recursive: true })
-  await mkdir(inboxDir,   { recursive: true })
+  await mkdir(inboxDir, { recursive: true })
   info(`storeDir: ${storeDir}`)
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -149,28 +124,9 @@ async function main(): Promise<void> {
   info(`架构任务 (plan-arch):     ${archTasks.map(t => `[${t.id}] ${t.title.slice(0, 20)}...`).join(', ')}`)
 
   // ─────────────────────────────────────────────────────────────────────────
-  // Phase B：Harness 约束文件 + 组件初始化
+  // Phase B：组件初始化
   // ─────────────────────────────────────────────────────────────────────────
   section('Phase B：组件初始化')
-
-  // Harness：任务 review 前必须有测试文件（无 APPROVED 关键词 → mock LLM fail）
-  await writeFile(join(harnessDir, 'task-needs-test.md'), `---
-id: task-needs-test
-applies_to:
-  - task
-trigger_on:
-  - review
----
-# 任务测试覆盖约束
-
-任务进入 review 前，artifact_refs 中必须包含至少一个 type=test 的测试文件。
-
-检查 artifact_refs 是否包含 {"type": "test", "path": "*.test.*"} 条目。
-RESULT: fail if no test artifacts found.
-`)
-
-  const harnessLoader = new HarnessLoader(harnessDir)
-  await harnessLoader.scan()
 
   // ExporterRegistry：尝试 OTLP/gRPC → Jaeger；同时注册 ConsoleExporter 作为本地 fallback
   const exporterRegistry = new ExporterRegistry()
@@ -188,8 +144,6 @@ RESULT: fail if no test artifacts found.
   const spanManager = new SpanManager({ projectId: SERVICE_NAME, exporterRegistry })
   const eventLog    = new EventLog(logPath)
   eventLog.load()
-  const feedbackLog  = new FeedbackLog(feedbackPath)
-  feedbackLog.load()
   const inboxAdapter = new InboxAdapter(inboxDir)
 
   const handler = new CommandHandler({ storeDir, eventBus, spanManager, eventLog })
@@ -202,27 +156,10 @@ RESULT: fail if no test artifacts found.
   })
   notifyEngine.start()
 
-  const evaluator = new ConstraintEvaluator({ enabled: true, llmFn: mockLlm })
-  const triggerExecutor = new TriggerExecutor({
-    handler, evaluator, harness: harnessLoader, eventBus, inbox: inboxAdapter, feedbackLog,
-  })
-  triggerExecutor.start()
-
-  // RemediationEngine：监听 rejected → 写队列
-  const remediation = new RemediationEngine({
-    eventBus,
-    handler,
-    feedbackLog,
-    queueDir,
-    maxAttempts: 3,
-  })
-  remediation.start()
-
   const allEvents: TwEvent[] = []
   eventBus.subscribe(ev => allEvents.push(ev))
 
-  ok(`Harness: ${harnessLoader.list().map(h => h.id).join(', ')}`)
-  ok('EventBus / CommandHandler / TriggerExecutor / RemediationEngine 已启动')
+  ok('EventBus / CommandHandler / NotifyEngine 已启动')
 
   // ─────────────────────────────────────────────────────────────────────────
   // Phase C：注册实体层级（UseCase → Plan × 2 → Task × N）
@@ -328,7 +265,7 @@ RESULT: fail if no test artifacts found.
     .every(s => s?.trace_id === ucSpan?.trace_id)
 
   if (allSameTrace) {
-    ok('✅ 所有 Plan/Task span 与 UseCase 共享同一 trace_id（W3C TraceContext 继承正确）')
+    ok('所有 Plan/Task span 与 UseCase 共享同一 trace_id（W3C TraceContext 继承正确）')
   } else {
     fail('trace_id 不一致！检查 SpanManager.deriveTraceId()')
     if (planFeSpan?.trace_id !== ucSpan?.trace_id)
@@ -354,14 +291,13 @@ RESULT: fail if no test artifacts found.
   })
 
   if (cascadeResult.ok) {
-    const expectedCount = 1 + 2 + feTaskIds.length + archTaskIds.slice(0, 2).length
-    ok(`cascadeUpdate 成功：updated_count=${cascadeResult.data?.updated_count}  (预期 ≥ ${1+2})`)
-    ok(`覆盖：1 UseCase + 2 Plans + ${feTaskIds.length + 2} Tasks = ${expectedCount} 个实体`)
+    ok(`cascadeUpdate 成功：updated_count=${cascadeResult.data?.updated_count}  (预期 >= ${1+2})`)
+    ok(`覆盖：1 UseCase + 2 Plans + ${feTaskIds.length + 2} Tasks`)
   } else {
     fail(`cascadeUpdate 失败：${cascadeResult.error?.message}`)
   }
 
-  // 等 EventBus 批窗口 flush（cascadeUpdate 内通过 eventBus.publish 发布，批处理延迟 30ms）
+  // 等 EventBus 批窗口 flush
   await new Promise(r => setTimeout(r, 80))
 
   // 验证 upstream_changed 事件已发布
@@ -373,117 +309,47 @@ RESULT: fail if no test artifacts found.
   if (upstreamEvents.length > 3) info(`  ... 等 ${upstreamEvents.length - 3} 个`)
 
   // ─────────────────────────────────────────────────────────────────────────
-  // Phase F：状态流转 + TriggerExecutor 自动拒绝
+  // Phase F：状态流转 + 手动拒绝
   // ─────────────────────────────────────────────────────────────────────────
-  section('Phase F：状态流转 → Harness 评估 → 自动拒绝')
+  section('Phase F：状态流转 → 手动拒绝无测试任务')
 
-  // tm-fe-3（全局组件库）：无测试 artifact → review 时被自动拒绝
+  // tm-fe-3（全局组件库）：无测试 artifact → 手动拒绝
   const rejectTarget = feTaskIds[2]  // tm-fe-3
-  info(`推进 ${rejectTarget} (全局组件库开发) → in_progress → review...`)
+  info(`推进 ${rejectTarget} (全局组件库开发) → in_progress → review → rejected...`)
   await handler.updateState({ id: rejectTarget, state: 'in_progress' })
   await handler.updateState({ id: rejectTarget, state: 'review' })
-  ok(`${rejectTarget} → review  [task-needs-test harness 触发，等待 mock LLM 评估...]`)
+  await handler.updateState({ id: rejectTarget, state: 'rejected', reason: '缺少单元测试覆盖，需要补充测试后重新提交' })
+  ok(`${rejectTarget} → rejected  [手动拒绝：缺少测试]`)
 
-  // tm-arch-9（工具函数）：无测试 → review → 被拒绝
+  // tm-arch-9（工具函数）：无测试 → 手动拒绝
   const rejectTarget2 = archTaskIds[0] // tm-arch-9
-  info(`推进 ${rejectTarget2} (工具函数与辅助模块) → in_progress → review...`)
+  info(`推进 ${rejectTarget2} (工具函数与辅助模块) → in_progress → review → rejected...`)
   await handler.updateState({ id: rejectTarget2, state: 'in_progress' })
   await handler.updateState({ id: rejectTarget2, state: 'review' })
-  ok(`${rejectTarget2} → review  [task-needs-test harness 触发]`)
+  await handler.updateState({ id: rejectTarget2, state: 'rejected', reason: '缺少测试文件，artifact_refs 中无 type=test 条目' })
+  ok(`${rejectTarget2} → rejected  [手动拒绝：缺少测试]`)
 
-  // 等待 TriggerExecutor 批处理 + LLM 评估 + RemediationEngine 入队
-  info('等待异步评估 + 修复队列写入...')
-  await new Promise(r => setTimeout(r, 600))
+  await new Promise(r => setTimeout(r, 100))
 
-  // 验证被自动拒绝
+  // 验证被拒绝
   const fe3Status    = await handler.getStatus({ id: rejectTarget })
   const arch9Status  = await handler.getStatus({ id: rejectTarget2 })
 
   if (fe3Status.entity.state === 'rejected') {
-    ok(`${rejectTarget} state=rejected  [task-needs-test harness 自动拒绝 ✓]`)
+    ok(`${rejectTarget} state=rejected  ✓`)
   } else {
     warn(`${rejectTarget} state=${fe3Status.entity.state}  [预期 rejected]`)
   }
   if (arch9Status.entity.state === 'rejected') {
-    ok(`${rejectTarget2} state=rejected  [task-needs-test harness 自动拒绝 ✓]`)
+    ok(`${rejectTarget2} state=rejected  ✓`)
   } else {
     warn(`${rejectTarget2} state=${arch9Status.entity.state}  [预期 rejected]`)
   }
 
   // ─────────────────────────────────────────────────────────────────────────
-  // Phase G：RemediationEngine 验证
+  // Phase G：Diagnose 模拟输出（与 `tw diagnose <id>` 等价）
   // ─────────────────────────────────────────────────────────────────────────
-  section('Phase G：RemediationEngine — 自动修复队列验证')
-
-  const pendingFiles = await readdir(join(queueDir, 'pending')).catch(() => [] as string[])
-  ok(`pending/ 队列中 ${pendingFiles.length} 个待修复项`)
-  for (const f of pendingFiles) {
-    info(`  ${f}`)
-  }
-
-  if (pendingFiles.length >= 2) {
-    ok('两个被拒绝的任务均已入队  ✓')
-  } else if (pendingFiles.length > 0) {
-    warn(`只有 ${pendingFiles.length} 个入队（另一个可能重试超限或去重了）`)
-  } else {
-    warn('pending 队列为空（等待时间可能不足，或 eventBus 批窗口延迟）')
-  }
-
-  // 验证去重：同一实体重复触发不会重复入队
-  info('测试去重：重复触发同一 rejection 事件...')
-  const sameTs = new Date().toISOString()
-  const dedupEvent = {
-    type: 'entity.state_changed' as const,
-    entity_id: rejectTarget,
-    state: 'rejected',
-    ts: sameTs,
-    id: 'dedup-test-1',
-    entity_type: 'task',
-  }
-  // 直接发两次相同事件到 EventBus
-  eventBus.publish(dedupEvent)
-  eventBus.publish(dedupEvent)
-  await new Promise(r => setTimeout(r, 100))
-  const pendingAfterDedup = await readdir(join(queueDir, 'pending')).catch(() => [] as string[])
-  const diff = pendingAfterDedup.length - pendingFiles.length
-  if (diff <= 1) {
-    ok(`去重验证：重复 rejection 事件只入队 ${diff} 次（dedup_key = entity_id|ts）  ✓`)
-  } else {
-    fail(`去重失败：diff=${diff}，入队了 ${diff} 次`)
-  }
-
-  // 验证熔断器：预填 done/ 目录让 tm-arch-9 超过 maxAttempts(3)
-  info('测试熔断器：为 tm-arch-9 预置 3 次历史失败记录...')
-  const doneDir = join(queueDir, 'done')
-  await mkdir(doneDir, { recursive: true })
-  for (let i = 1; i <= 3; i++) {
-    await writeFile(
-      join(doneDir, `rem-0000000${i}-${rejectTarget2}.json`),
-      JSON.stringify({ entity_id: rejectTarget2, attempt: i }),
-    )
-  }
-  const beforeBreaker = (await readdir(join(queueDir, 'pending')).catch(() => [] as string[])).length
-  // 触发新的拒绝事件
-  eventBus.publish({
-    type: 'entity.state_changed' as const,
-    entity_id: rejectTarget2,
-    state: 'rejected',
-    ts: new Date().toISOString() + '-breaker',  // 不同 ts = 新的 dedup key
-    id: 'breaker-test',
-    entity_type: 'task',
-  })
-  await new Promise(r => setTimeout(r, 100))
-  const afterBreaker = (await readdir(join(queueDir, 'pending')).catch(() => [] as string[])).length
-  if (afterBreaker === beforeBreaker) {
-    ok(`熔断器验证：${rejectTarget2} 已达 maxAttempts(3)，新 rejection 不再入队  ✓`)
-  } else {
-    warn(`熔断器：新增了 ${afterBreaker - beforeBreaker} 个条目（预期 0）`)
-  }
-
-  // ─────────────────────────────────────────────────────────────────────────
-  // Phase H：Diagnose 模拟输出（与 `tw diagnose <id>` 等价）
-  // ─────────────────────────────────────────────────────────────────────────
-  section(`Phase H：Diagnose 模拟 — ${rejectTarget} (${fe3Status.entity.state})`)
+  section(`Phase G：Diagnose 模拟 — ${rejectTarget} (${fe3Status.entity.state})`)
 
   const entity = fe3Status.entity
   const tmTaskRef = frontendTasks.find(t => `tm-fe-${t.id}` === rejectTarget)
@@ -499,17 +365,8 @@ RESULT: fail if no test artifacts found.
   if (entityEvents.length > 0) {
     console.log(`\n  ━━━ Span Events (${entityEvents.length} 条) ━━━━━━━━━━━━━━━━━━━━`)
     for (const ev of entityEvents) {
-      const warn = ev.type.includes('rejected') ? ' ← ⚠️' : ''
-      console.log(`    ${ev.ts.slice(11, 19)}  ${ev.type}${warn}`)
-    }
-  }
-
-  const rejectFeedback = feedbackLog.query({ entity_id: rejectTarget, result: 'fail', limit: 3 })
-  if (rejectFeedback.length > 0) {
-    console.log(`\n  ━━━ Harness 失败记录 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`)
-    for (const fb of rejectFeedback) {
-      console.log(`    Harness: ${fb.harness_id}`)
-      console.log(`    Reason:  ${fb.reason?.slice(0, 100) ?? 'N/A'}`)
+      const warnStr = ev.type.includes('rejected') ? ' ← ⚠️' : ''
+      console.log(`    ${ev.ts.slice(11, 19)}  ${ev.type}${warnStr}`)
     }
   }
 
@@ -524,7 +381,7 @@ RESULT: fail if no test artifacts found.
   console.log('')
 
   // ─────────────────────────────────────────────────────────────────────────
-  // Phase I：最终汇总
+  // Phase H：最终汇总
   // ─────────────────────────────────────────────────────────────────────────
   section('最终汇总')
 
@@ -533,7 +390,6 @@ RESULT: fail if no test artifacts found.
   const rejectedCnt   = allEntities.filter(e => e.state === 'rejected').length
   const pendingCnt    = allEntities.filter(e => e.state === 'pending').length
 
-  const remPending    = await readdir(join(queueDir, 'pending')).catch(() => [] as string[])
   const upstreamEvts  = allEvents.filter(e => e.type === 'entity.upstream_changed')
   const inboxItems    = await inboxAdapter.list()
 
@@ -544,14 +400,10 @@ RESULT: fail if no test artifacts found.
   │ 从真实 tasks.json 注册 ${String(allEntities.length).padStart(2)} 个 TW 实体               │  ${allEntities.length >= 6 ? '✅ 通过' : '❌ 失败'}  │
   │ UseCase→Plan→Task trace_id 一致                      │  ${allSameTrace ? '✅ 通过' : '❌ 失败'}  │
   │ cascadeUpdate 通知 ${String(upstreamEvts.length).padStart(2)} 个下游实体 (entity.upstream_changed) │  ${upstreamEvts.length > 0 ? '✅ 通过' : '❌ 失败'}  │
-  │ TriggerExecutor 自动拒绝无测试任务                    │  ${rejectedCnt >= 2 ? '✅ 通过' : '⚠️  待确认'}  │
-  │ RemediationEngine 入队被拒绝任务                      │  ${remPending.length > 0 ? '✅ 通过' : '⚠️  待确认'}  │
-  │ 去重验证 (dedup_key=entity_id|ts)                    │  ${diff <= 1 ? '✅ 通过' : '❌ 失败'}  │
-  │ 熔断器验证 (maxAttempts=3)                           │  ${afterBreaker === beforeBreaker ? '✅ 通过' : '⚠️  待确认'}  │
+  │ 手动拒绝无测试任务                                     │  ${rejectedCnt >= 2 ? '✅ 通过' : '⚠️  待确认'}  │
   │ NotifyEngine 收件箱 (rejected 通知)                  │  ${inboxItems.length > 0 ? '✅ 通过' : '⚠️  待确认'}  │
   ├─────────────────────────────────────────────────────┼──────────┤
   │ 实体统计：completed=${completedCnt}  rejected=${rejectedCnt}  pending=${pendingCnt}              │          │
-  │ 修复队列：pending=${remPending.length} 项                              │          │
   │ EventLog：${allEvents.length} 条事件                                 │          │
   └─────────────────────────────────────────────────────┴──────────┘
   `)
@@ -559,9 +411,9 @@ RESULT: fail if no test artifacts found.
   ok('Example 13 — TaskMaster 全链路闭环验证完成')
 
   // ─────────────────────────────────────────────────────────────────────────
-  // Phase J：推进所有实体到终态 → 触发 span export to Jaeger
+  // Phase I：推进所有实体到终态 → 触发 span export to Jaeger
   // ─────────────────────────────────────────────────────────────────────────
-  section('Phase J：推进终态 → Span Export to Jaeger')
+  section('Phase I：推进终态 → Span Export to Jaeger')
 
   // 已完成任务（tm-fe-1, tm-fe-2）走 completed
   for (const taskId of [feTaskIds[0], feTaskIds[1]]) {
@@ -597,7 +449,7 @@ RESULT: fail if no test artifacts found.
   await exporterRegistry.shutdown()
   ok('所有 span 已 flush 到 Jaeger')
 
-  // Jaeger 查询入口（trace_id 在 Phase D 已从 ucSpan 获取，此处直接复用）
+  // Jaeger 查询入口
   const traceIdStr = ucSpan?.trace_id ?? '（未知）'
 
   console.log(`
@@ -628,9 +480,7 @@ ${C.bold}${C.green}  Jaeger Trace 导出完成！${C.reset}
 `)
 
   // ── 清理 ─────────────────────────────────────────────────────────────────
-  triggerExecutor.stop()
   notifyEngine.stop()
-  remediation.stop()
   eventBus.stop()
   await rm(storeDir, { recursive: true })
 }

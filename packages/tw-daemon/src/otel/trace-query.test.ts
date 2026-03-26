@@ -43,9 +43,8 @@ describe('TraceQueryEngine', () => {
     ]
   })
 
-  function makeEngine(opts: { spans?: SpanMeta[]; feedbackEntries?: any[] } = {}) {
+  function makeEngine(opts: { spans?: SpanMeta[] } = {}) {
     const spanList = opts.spans ?? spans
-    const feedbackList = opts.feedbackEntries ?? []
     return new TraceQueryEngine({
       spanManager: {
         getSpan: (id: string) => spanList.find(s => s.entity_id === id),
@@ -53,9 +52,6 @@ describe('TraceQueryEngine', () => {
       } as any,
       getAllEntities: () => entities,
       getEntity: (id: string) => entities.find(e => e.id === id),
-      feedbackLog: {
-        query: ({ entity_id }: any) => feedbackList.filter((f: any) => f.entity_id === entity_id),
-      } as any,
     })
   }
 

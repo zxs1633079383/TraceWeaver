@@ -9,7 +9,6 @@ export class EntityCache {
       ...entity,
       depends_on: entity.depends_on ? [...entity.depends_on] : undefined,
       artifact_refs: entity.artifact_refs ? entity.artifact_refs.map(r => ({ ...r })) : undefined,
-      constraint_refs: entity.constraint_refs ? [...entity.constraint_refs] : undefined,
       attributes: entity.attributes ? { ...entity.attributes } : undefined,
     }
   }

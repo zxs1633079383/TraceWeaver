@@ -1,7 +1,7 @@
 /**
- * Example 11 — 全链路自主闭环 Demo
+ * Example 11 — 全链路可观测闭环 Demo（Pure Observability）
  *
- * 本示例覆盖 TraceWeaver 全部功能模块，展示一个完整的 AI 自主 observe→detect→diagnose→validate→fix 闭环：
+ * 本示例覆盖 TraceWeaver 的核心可观测功能模块，展示完整的 observe→track→query→export 闭环：
  *
  *  功能覆盖：
  *    ✅ 状态机 (State Machine)                 — 实体注册、状态流转
@@ -11,30 +11,22 @@
  *    ✅ OTel SpanManager + SpanMetrics         — 周期时间、失败率、吞吐量
  *    ✅ DAG 依赖图                             — depends_on + getDagSnapshot
  *    ✅ ImpactResolver                         — 文件→实体反向索引 + 传递影响
- *    ✅ HarnessLoader                          — 约束文件即代码
- *    ✅ TriggerExecutor + FeedbackLog          — 状态触发自动评估、反馈历史记录
- *    ✅ ConstraintEvaluator                    — 模拟 LLM 约束评估（pass / fail）
  *    ✅ NotifyEngine + InboxAdapter            — 通知规则 + 收件箱
- *    ✅ FeedbackLog                            — 评估历史 NDJSON、摘要、趋势分析
- *    ✅ HarnessValidator                       — orphaned_ref / dead_harness / persistent_failure
  *    ✅ ExporterRegistry + ConsoleExporter     — OTel span 多适配器导出
+ *    ✅ Manual rejection                       — 手动拒绝任务 + rejected 通知
  *
  *  边界条件：
  *    ⚠  无效状态跳转                           — 被状态机阻断，entity 保持原状态
- *    ⚠  Harness 自动拒绝                       — 任务到达 review 时约束不满足，自动转 rejected
+ *    ⚠  手动拒绝                               — 通过 updateState 手动设置 rejected
  *    ⚠  传递影响                              — 文件变更影响直接+间接依赖实体
  *    ⚠  WAL 重放恢复                           — 模拟重启后实体状态仍正确
  *    ⚠  EventLog 跨"重启"持久化               — 重建 EventLog 实例后历史可查
- *    ⚠  并发防重入                             — in-flight Set 防止同实体双重评估
- *    ⚠  FeedbackLog 连续失败告警              — consecutive_failures >= 3 写入收件箱
- *    ⚠  HarnessValidator orphaned_ref         — entity 引用不存在的 harness 被检测
- *    ⚠  HarnessValidator dead_harness         — applies_to 无匹配实体类型被检测
  *
  * 运行方式：
- *   npm run example:11
+ *   npm run run:11 --workspace=examples
  */
 
-import { mkdtemp, rm, mkdir, writeFile } from 'node:fs/promises'
+import { mkdtemp, rm, mkdir } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -43,14 +35,9 @@ import { EventBus } from '../../packages/tw-daemon/src/core/event-bus/event-bus.
 import { SpanManager } from '../../packages/tw-daemon/src/otel/span-manager.js'
 import { EventLog } from '../../packages/tw-daemon/src/log/event-log.js'
 import { SpanMetrics } from '../../packages/tw-daemon/src/metrics/span-metrics.js'
-import { HarnessLoader } from '../../packages/tw-daemon/src/harness/loader.js'
-import { TriggerExecutor } from '../../packages/tw-daemon/src/trigger/executor.js'
 import { ImpactResolver } from '../../packages/tw-daemon/src/impact/impact-resolver.js'
-import { ConstraintEvaluator } from '../../packages/tw-daemon/src/constraint/evaluator.js'
 import { NotifyEngine } from '../../packages/tw-daemon/src/notify/engine.js'
 import { InboxAdapter } from '../../packages/tw-daemon/src/notify/inbox.js'
-import { FeedbackLog } from '../../packages/tw-daemon/src/feedback/feedback-log.js'
-import { HarnessValidator } from '../../packages/tw-daemon/src/harness/validator.js'
 import { ExporterRegistry } from '../../packages/tw-daemon/src/otel/exporter-registry.js'
 import { ConsoleExporter } from '../../packages/tw-daemon/src/otel/exporter-console.js'
 import type { TwEvent } from '@traceweaver/types'
@@ -75,75 +62,23 @@ function warn(msg: string): void { console.log(`  ${C.yellow}⚠${C.reset} ${msg
 function info(msg: string): void { console.log(`  ${C.gray}→${C.reset} ${msg}`) }
 function fail(msg: string): void { console.log(`  ${C.red}✗${C.reset} ${msg}`) }
 
-// ── 模拟 LLM：含 APPROVED 关键词则 pass，否则 fail ─────────────────────────
-async function mockLlm(prompt: string): Promise<string> {
-  info(`[Mock LLM] 评估约束...`)
-  if (prompt.includes('APPROVED')) {
-    return 'RESULT: pass\n所有约束已满足。'
-  }
-  return 'RESULT: fail\n缺少必要的测试覆盖文件（artifact_refs 中无 type=test 的条目）。'
-}
-
 // ── 主流程 ──────────────────────────────────────────────────────────────────
 async function main(): Promise<void> {
-  console.log(`\n${C.bold}TraceWeaver — 全链路自主闭环 Demo (Example 11)${C.reset}`)
-  console.log('覆盖：状态机 / EventLog / SpanMetrics / DAG / ImpactResolver / Harness / TriggerExecutor / Notify\n')
+  console.log(`\n${C.bold}TraceWeaver — 全链路可观测闭环 Demo (Example 11)${C.reset}`)
+  console.log('覆盖：状态机 / EventLog / SpanMetrics / DAG / ImpactResolver / Notify / ExporterRegistry\n')
 
-  const storeDir      = await mkdtemp(join(tmpdir(), 'tw-example-11-'))
-  const logPath       = join(storeDir, 'events.ndjson')
-  const feedbackPath  = join(storeDir, 'feedback', 'feedback.ndjson')
-  const harnessDir    = join(storeDir, 'harness')
-  const inboxDir      = join(storeDir, 'inbox')
-  await mkdir(harnessDir, { recursive: true })
-  await mkdir(inboxDir,   { recursive: true })
+  const storeDir = await mkdtemp(join(tmpdir(), 'tw-example-11-'))
+  const logPath  = join(storeDir, 'events.ndjson')
+  const inboxDir = join(storeDir, 'inbox')
+  await mkdir(inboxDir, { recursive: true })
   info(`storeDir: ${storeDir}`)
 
   // ────────────────────────────────────────────────────────────────────────
-  // Phase A：写入 Harness 约束文件
+  // Phase A：组件初始化
   // ────────────────────────────────────────────────────────────────────────
-  section('Phase A：Harness 约束文件注册')
+  section('Phase A：组件初始化')
 
-  // 约束 1：任务审核前必须有测试文件（不含 APPROVED → fail）
-  await writeFile(join(harnessDir, 'need-tests.md'), `---
-id: need-tests
-applies_to:
-  - task
-trigger_on:
-  - review
----
-# 测试覆盖约束
-
-任务进入审核前，artifact_refs 中必须包含至少一个 type=test 的文件条目。
-
-请检查实体的 artifact_refs 字段。
-RESULT: fail if no test artifacts found.
-`)
-
-  // 约束 2：用例完成前必须包含 APPROVED（模拟已审批→pass）
-  await writeFile(join(harnessDir, 'usecase-approval.md'), `---
-id: usecase-approval
-applies_to:
-  - usecase
-trigger_on:
-  - completed
----
-# 用例审批约束
-
-用例完成前需包含 APPROVED 关键词，代表已通过产品审批。
-
-APPROVED
-`)
-
-  const harnessLoader = new HarnessLoader(harnessDir)
-  await harnessLoader.scan()
-  ok(`加载 ${harnessLoader.list().length} 个 harness：${harnessLoader.list().map(h => h.id).join(', ')}`)
-
-  // ────────────────────────────────────────────────────────────────────────
-  // Phase B：初始化所有组件
-  // ────────────────────────────────────────────────────────────────────────
-  section('Phase B：组件初始化')
-
-  // ExporterRegistry（Phase 6）：多适配器 OTel span 导出（示例用 console）
+  // ExporterRegistry：多适配器 OTel span 导出（示例用 console）
   const exporterRegistry = new ExporterRegistry()
   exporterRegistry.register(new ConsoleExporter())
 
@@ -152,10 +87,6 @@ APPROVED
   const eventLog    = new EventLog(logPath)
   eventLog.load()
   const inboxAdapter = new InboxAdapter(inboxDir)
-
-  // FeedbackLog（Phase 6）：评估历史 NDJSON 持久化
-  const feedbackLog = new FeedbackLog(feedbackPath)
-  feedbackLog.load()
 
   const handler = new CommandHandler({ storeDir, eventBus, spanManager, eventLog })
   await handler.init()
@@ -171,30 +102,16 @@ APPROVED
   })
   notifyEngine.start()
 
-  // ConstraintEvaluator（使用 mock LLM）
-  const evaluator = new ConstraintEvaluator({ enabled: true, llmFn: mockLlm })
-
-  // TriggerExecutor：自动在触发状态时评估 harness，wired with feedbackLog（Phase 6）
-  const triggerExecutor = new TriggerExecutor({
-    handler,
-    evaluator,
-    harness: harnessLoader,
-    eventBus,
-    inbox: inboxAdapter,
-    feedbackLog,
-  })
-  triggerExecutor.start()
-
   // 收集所有事件（用于最终统计）
   const allEvents: TwEvent[] = []
   eventBus.subscribe(ev => allEvents.push(ev))
 
-  ok('EventBus、CommandHandler、NotifyEngine、TriggerExecutor、FeedbackLog、ExporterRegistry 全部就绪')
+  ok('EventBus、CommandHandler、NotifyEngine、ExporterRegistry 全部就绪')
 
   // ────────────────────────────────────────────────────────────────────────
-  // Phase C：注册实体层级（usecase → plan → task × 4）
+  // Phase B：注册实体层级（usecase → plan → task × 3）
   // ────────────────────────────────────────────────────────────────────────
-  section('Phase C：注册实体层级 + DAG 依赖图')
+  section('Phase B：注册实体层级 + DAG 依赖图')
 
   const uc = await handler.register({
     id: 'uc-auth-revamp',
@@ -213,22 +130,17 @@ APPROVED
   })
   ok(`plan: ${plan.id}  state=${plan.state}  depends_on=[uc-auth-revamp]`)
 
-  // 任务 1：有测试文件 → harness 会 pass（artifact_refs 含 APPROVED 模拟）
-  // 注意：need-tests harness 只检查 mock LLM 里有无 APPROVED，所以这里通过不了
-  // → 这正是边界：task-1 进入 review 后会被自动拒绝
+  // 任务 1：将被手动拒绝（模拟质量不达标）
   const task1 = await handler.register({
     id: 'task-1-no-tests',
     entity_type: 'task',
     depends_on: ['plan-backend'],
     attributes: { title: '实现 JWT 刷新逻辑（无测试）' },
     artifact_refs: [{ type: 'code', path: 'src/auth/jwt.ts' }],
-    constraint_refs: ['need-tests'],
   })
-  ok(`task-1: ${task1.id}  state=${task1.state}  [无测试文件，harness 将自动拒绝]`)
+  ok(`task-1: ${task1.id}  state=${task1.state}  [将被手动拒绝]`)
 
-  // 任务 2：有测试文件（artifact_refs 中含 APPROVED 标记的内容）—— mock LLM 扫描到 APPROVED → pass
-  // 实际通过方式：约束文件里含 APPROVED → mock LLM 返回 pass
-  // （由于 mock LLM 检查的是整个 prompt，harness 文件体含 APPROVED 即可触发 pass）
+  // 任务 2：正常流转到 completed
   const task2 = await handler.register({
     id: 'task-2-with-tests',
     entity_type: 'task',
@@ -238,11 +150,10 @@ APPROVED
       { type: 'code', path: 'src/auth/hash.ts' },
       { type: 'test', path: 'src/auth/hash.test.ts' },
     ],
-    constraint_refs: ['need-tests'],
   })
-  ok(`task-2: ${task2.id}  state=${task2.state}  [有测试文件]`)
+  ok(`task-2: ${task2.id}  state=${task2.state}  [正常完成]`)
 
-  // 任务 3：ImpactResolver 演示用（依赖 src/auth/jwt.ts）
+  // 任务 3：ImpactResolver 演示用（依赖 task-1）
   const task3 = await handler.register({
     id: 'task-3-downstream',
     entity_type: 'task',
@@ -257,9 +168,9 @@ APPROVED
   info(`DAG 节点数: ${dag.nodes.length}  边数: ${dag.edges.length}`)
 
   // ────────────────────────────────────────────────────────────────────────
-  // Phase D：ImpactResolver — 文件变更影响分析
+  // Phase C：ImpactResolver — 文件变更影响分析
   // ────────────────────────────────────────────────────────────────────────
-  section('Phase D：ImpactResolver — 文件变更影响分析')
+  section('Phase C：ImpactResolver — 文件变更影响分析')
 
   // docs/auth-prd.md 被 usecase 和 plan 都引用
   const impact1 = handler.resolveImpact('docs/auth-prd.md')
@@ -278,9 +189,9 @@ APPROVED
   warn(`src/nonexistent.ts 影响: directly=${impact3.directly_affected.length}  transitively=${impact3.transitively_affected.length}  [预期均为 0]`)
 
   // ────────────────────────────────────────────────────────────────────────
-  // Phase E：边界条件 — 无效状态跳转
+  // Phase D：边界条件 — 无效状态跳转
   // ────────────────────────────────────────────────────────────────────────
-  section('Phase E：边界条件 — 无效状态跳转')
+  section('Phase D：边界条件 — 无效状态跳转')
 
   // pending → completed（非法，必须经过 in_progress）
   try {
@@ -296,20 +207,21 @@ APPROVED
   ok(`task-1 状态仍为: ${check1.entity.state}  [预期: pending]`)
 
   // ────────────────────────────────────────────────────────────────────────
-  // Phase F：状态流转 + TriggerExecutor 自动拒绝（边界条件）
+  // Phase E：状态流转 + 手动拒绝
   // ────────────────────────────────────────────────────────────────────────
-  section('Phase F：状态流转 + TriggerExecutor 自动评估')
+  section('Phase E：状态流转 + 手动拒绝')
 
-  // task-1：无测试 → need-tests harness 中无 APPROVED → mock LLM fail → 自动 rejected
+  // task-1：推进到 review，然后手动拒绝（模拟质量检查不通过）
   await handler.updateState({ id: 'task-1-no-tests', state: 'in_progress' })
   ok(`task-1 → in_progress`)
   await handler.updateState({ id: 'task-1-no-tests', state: 'review' })
-  ok(`task-1 → review  [TriggerExecutor 触发，等待评估...]`)
+  ok(`task-1 → review`)
+  await handler.updateState({ id: 'task-1-no-tests', state: 'rejected', reason: '缺少单元测试覆盖，不满足代码审查标准' })
+  ok(`task-1 → rejected  [手动拒绝：缺少测试]`)
 
-  // task-2：usecase-approval harness 含 APPROVED → mock LLM pass → 不自动拒绝
+  // task-2：正常完成
   await handler.updateState({ id: 'task-2-with-tests', state: 'in_progress' })
   await handler.updateState({ id: 'task-2-with-tests', state: 'review' })
-  ok(`task-2 → review`)
   await handler.updateState({ id: 'task-2-with-tests', state: 'completed' })
   ok(`task-2 → completed`)
 
@@ -319,33 +231,27 @@ APPROVED
   await handler.updateState({ id: 'plan-backend', state: 'completed' })
   ok(`plan → completed`)
 
-  // usecase：触发 usecase-approval harness（含 APPROVED → pass）
-  // pending → in_progress → review → completed
+  // usecase：正常完成
   await handler.updateState({ id: 'uc-auth-revamp', state: 'in_progress' })
   await handler.updateState({ id: 'uc-auth-revamp', state: 'review' })
   await handler.updateState({ id: 'uc-auth-revamp', state: 'completed' })
-  ok(`usecase → completed  [usecase-approval harness 含 APPROVED → 预期 pass]`)
+  ok(`usecase → completed`)
 
-  // 等待批处理窗口 + 异步评估完成
-  info('等待 TriggerExecutor 批处理和异步评估...')
-  await new Promise(r => setTimeout(r, 500))
+  // 等待批处理窗口
+  await new Promise(r => setTimeout(r, 200))
 
-  // 验证 task-1 被自动拒绝
+  // 验证 task-1 被拒绝
   const task1Final = await handler.getStatus({ id: 'task-1-no-tests' })
-  if (task1Final.entity.state === 'rejected') {
-    ok(`task-1 已被自动拒绝 ✓  [state=rejected — harness 'need-tests' 触发]`)
-  } else {
-    warn(`task-1 state=${task1Final.entity.state}  [预期 rejected，可能评估尚未完成]`)
-  }
+  ok(`task-1 state=${task1Final.entity.state}  [预期: rejected]`)
 
-  // 验证 task-2 未被拒绝
+  // 验证 task-2 完成
   const task2Final = await handler.getStatus({ id: 'task-2-with-tests' })
-  ok(`task-2 state=${task2Final.entity.state}  [预期 completed，未被自动拒绝]`)
+  ok(`task-2 state=${task2Final.entity.state}  [预期: completed]`)
 
   // ────────────────────────────────────────────────────────────────────────
-  // Phase G：EventLog 持久化验证（模拟"重启"后仍可查询）
+  // Phase F：EventLog 持久化验证（模拟"重启"后仍可查询）
   // ────────────────────────────────────────────────────────────────────────
-  section('Phase G：EventLog 持久化 — 跨"重启"查询')
+  section('Phase F：EventLog 持久化 — 跨"重启"查询')
 
   const totalHistory = eventLog.getHistory()
   ok(`EventLog 总记录数: ${totalHistory.length} 条`)
@@ -368,9 +274,9 @@ APPROVED
   ok(`状态变更事件: ${stateChanges.length} 条`)
 
   // ────────────────────────────────────────────────────────────────────────
-  // Phase H：SpanMetrics — 周期时间 / 失败率 / 吞吐量
+  // Phase G：SpanMetrics — 周期时间 / 失败率 / 吞吐量
   // ────────────────────────────────────────────────────────────────────────
-  section('Phase H：SpanMetrics — 可观测性指标')
+  section('Phase G：SpanMetrics — 可观测性指标')
 
   const spanMetrics = new SpanMetrics(spanManager)
   const summary = spanMetrics.getSummary()
@@ -390,9 +296,9 @@ APPROVED
   }
 
   // ────────────────────────────────────────────────────────────────────────
-  // Phase I：通知收件箱验证
+  // Phase H：通知收件箱验证
   // ────────────────────────────────────────────────────────────────────────
-  section('Phase I：通知收件箱')
+  section('Phase H：通知收件箱')
 
   const inboxItems = await inboxAdapter.list()
   ok(`收件箱消息数: ${inboxItems.length} 条`)
@@ -404,11 +310,10 @@ APPROVED
   }
 
   // ────────────────────────────────────────────────────────────────────────
-  // Phase J：WAL 恢复验证（边界：重建 handler 后实体状态一致）
+  // Phase I：WAL 恢复验证（边界：重建 handler 后实体状态一致）
   // ────────────────────────────────────────────────────────────────────────
-  section('Phase J：WAL 崩溃恢复验证')
+  section('Phase I：WAL 崩溃恢复验证')
 
-  triggerExecutor.stop()
   notifyEngine.stop()
   eventBus.stop()
 
@@ -431,76 +336,12 @@ APPROVED
   eventBus2.stop()
 
   // ────────────────────────────────────────────────────────────────────────
-  // Phase K：FeedbackLog — 评估历史查询与摘要（Phase 6）
-  // ────────────────────────────────────────────────────────────────────────
-  section('Phase K：FeedbackLog — 评估历史与摘要')
-
-  const allFeedback = feedbackLog.getHistory()
-  ok(`FeedbackLog 总记录数: ${allFeedback.length} 条`)
-  for (const entry of allFeedback) {
-    const icon = entry.result === 'pass' ? '✓' : entry.result === 'fail' ? '✗' : '–'
-    info(`  ${icon} [seq=${entry.seq}] harness=${entry.harness_id}  entity=${entry.entity_id}  result=${entry.result}`)
-  }
-
-  // 查询 need-tests harness 的评估记录
-  const needTestsFeedback = feedbackLog.query({ harness_id: 'need-tests' })
-  ok(`need-tests harness 评估次数: ${needTestsFeedback.length}`)
-
-  // 获取摘要和趋势
-  const summaries = feedbackLog.getAllSummaries()
-  ok(`FeedbackLog 汇总（${summaries.length} 个 harness）:`)
-  for (const s of summaries) {
-    const trend = s.trend === 'improving' ? '↑' : s.trend === 'degrading' ? '↓' : '→'
-    info(`  ${s.harness_id}  total=${s.total}  pass=${s.pass}  fail=${s.fail}  consecutive_failures=${s.consecutive_failures}  trend=${trend}`)
-  }
-
-  // 边界：consecutive_failures ≥ 3 会触发 [FEEDBACK] 告警到收件箱
-  // （本示例中 need-tests 仅触发 1 次，不触发告警；演示知道阈值即可）
-  warn(`consecutive_failures 告警阈值: 3  当前 need-tests: ${feedbackLog.getSummary('need-tests').consecutive_failures}  [< 3 不触发]`)
-
-  // ────────────────────────────────────────────────────────────────────────
-  // Phase L：HarnessValidator — Harness-Entity 对齐验证（Phase 6）
-  // ────────────────────────────────────────────────────────────────────────
-  section('Phase L：HarnessValidator — 对齐检测')
-
-  const harnessValidator = new HarnessValidator(harnessLoader, feedbackLog)
-  const entities = handler.getAllEntities()
-  const issues = harnessValidator.validate(entities)
-
-  ok(`实体数: ${entities.length}  Harness 数: ${harnessLoader.list().length}`)
-  if (issues.length === 0) {
-    ok('✓ 无对齐问题（所有引用正确，无孤立 harness，无持续失败）')
-  } else {
-    for (const issue of issues) {
-      const prefix = issue.severity === 'error' ? '✗' : '⚠'
-      const target = issue.entity_id ? `entity=${issue.entity_id}` : `harness=${issue.harness_id}`
-      warn(`${prefix} [${issue.type}] ${target}: ${issue.message}`)
-      if (issue.suggestion) info(`    → ${issue.suggestion}`)
-    }
-  }
-
-  // 边界：注入一个不存在的 harness 引用，验证 orphaned_ref 检测
-  const ghostEntity = {
-    id: 'task-ghost', entity_type: 'task' as const, constraint_refs: ['harness-does-not-exist'],
-    state: 'pending', title: 'Ghost', created_at: '', updated_at: '', artifact_refs: [],
-    parent_id: undefined, attributes: {}, depends_on: [],
-  }
-  const ghostIssues = harnessValidator.validate([ghostEntity])
-  const orphaned = ghostIssues.filter(i => i.type === 'orphaned_ref')
-  if (orphaned.length > 0) {
-    ok(`orphaned_ref 检测: 发现 ${orphaned.length} 个孤立引用  [预期 1]`)
-    info(`  ${orphaned[0].message}`)
-  } else {
-    fail('orphaned_ref 检测：应检测到孤立引用，但未检测到')
-  }
-
-  // ────────────────────────────────────────────────────────────────────────
   // 最终汇总
   // ────────────────────────────────────────────────────────────────────────
   section('最终汇总')
 
   console.log(`
-  功能覆盖验证结果（Phase 1-6）：
+  功能覆盖验证结果：
   ┌──────────────────────────────────────────┬─────────┐
   │ 功能                                      │  状态   │
   ├──────────────────────────────────────────┼─────────┤
@@ -514,27 +355,18 @@ APPROVED
   │ DAG 依赖图 (depends_on)                   │   ✅    │
   │ ImpactResolver 文件→实体反向索引           │   ✅    │
   │ ImpactResolver 传递影响 BFS               │   ✅    │
-  │ HarnessLoader 约束文件                    │   ✅    │
-  │ TriggerExecutor 自动评估 + 自动拒绝        │   ✅    │
-  │ FeedbackLog NDJSON 评估历史               │   ✅    │
-  │ FeedbackLog 摘要 + 趋势分析               │   ✅    │
-  │ HarnessValidator orphaned_ref 检测        │   ✅    │
-  │ HarnessValidator dead_harness 检测        │   ✅    │
-  │ HarnessValidator persistent_failure       │   ✅    │
-  │ ConstraintEvaluator (Mock LLM)            │   ✅    │
   │ NotifyEngine + InboxAdapter               │   ✅    │
+  │ 手动拒绝 (updateState rejected)           │   ✅    │
   ├──────────────────────────────────────────┼─────────┤
   │ 边界：无效状态跳转被阻断                    │   ✅    │
-  │ 边界：Harness fail → 自动 rejected        │   ✅    │
+  │ 边界：手动 rejected + 通知                │   ✅    │
   │ 边界：不存在文件 → 空影响集合              │   ✅    │
   │ 边界：EventLog 跨实例持久化               │   ✅    │
   │ 边界：WAL 恢复后实体状态一致              │   ✅    │
-  │ 边界：FeedbackLog consecutive_failures    │   ✅    │
-  │ 边界：HarnessValidator orphaned_ref       │   ✅    │
   └──────────────────────────────────────────┴─────────┘
   `)
 
-  ok(`全链路闭环 Demo 运行完成！`)
+  ok(`全链路可观测闭环 Demo 运行完成！`)
   info(`EventLog 路径: ${logPath}  (${totalHistory.length} 条记录)`)
 
   // 清理临时目录

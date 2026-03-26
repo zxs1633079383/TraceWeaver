@@ -40,7 +40,6 @@ export function registerWebhook(
             parent_id: body.usecase.id,
             domain: plan.domain,
             depends_on: plan.depends_on,
-            constraint_refs: plan.constraint_refs,
           })
           results.push({ ok: true, data: entity })
         } catch (err: any) {

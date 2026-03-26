@@ -6,10 +6,6 @@ import type { CommandHandler } from './core/command-handler.js'
 import type { InboxAdapter } from './notify/inbox.js'
 import type { EventLog } from './log/event-log.js'
 import type { SpanMetrics } from './metrics/span-metrics.js'
-import type { HarnessLoader } from './harness/loader.js'
-import type { TriggerExecutor } from './trigger/executor.js'
-import type { FeedbackLog } from './feedback/feedback-log.js'
-import type { HarnessValidator } from './harness/validator.js'
 import type { TraceQueryEngine } from './otel/trace-query.js'
 import type { ReportGenerator } from './report/report-generator.js'
 
@@ -17,10 +13,6 @@ export interface IpcServerOptions {
   inbox?: InboxAdapter
   eventLog?: EventLog
   spanMetrics?: SpanMetrics
-  harnessLoader?: HarnessLoader
-  triggerExecutor?: TriggerExecutor
-  feedbackLog?: FeedbackLog
-  harnessValidator?: HarnessValidator
   traceQuery?: TraceQueryEngine
   reportGenerator?: ReportGenerator
 }
@@ -30,10 +22,6 @@ export class IpcServer {
   private readonly inbox?: InboxAdapter
   private readonly eventLog?: EventLog
   private readonly spanMetrics?: SpanMetrics
-  private readonly harnessLoader?: HarnessLoader
-  private readonly triggerExecutor?: TriggerExecutor
-  private readonly feedbackLog?: FeedbackLog
-  private readonly harnessValidator?: HarnessValidator
   private readonly traceQuery?: TraceQueryEngine
   private readonly reportGenerator?: ReportGenerator
 
@@ -46,16 +34,11 @@ export class IpcServer {
     this.inbox = opts?.inbox
     this.eventLog = opts?.eventLog
     this.spanMetrics = opts?.spanMetrics
-    this.harnessLoader = opts?.harnessLoader
-    this.triggerExecutor = opts?.triggerExecutor
-    this.feedbackLog = opts?.feedbackLog
-    this.harnessValidator = opts?.harnessValidator
     this.traceQuery = opts?.traceQuery
     this.reportGenerator = opts?.reportGenerator
   }
 
   async start(): Promise<void> {
-    // Remove stale socket file if present
     try { await rm(this.socketPath) } catch {}
     await new Promise<void>((resolve) => {
       this.server = createServer(socket => this.handleConnection(socket))
@@ -97,8 +80,6 @@ export class IpcServer {
     socket.on('error', () => socket.destroy())
   }
 
-  // NOTE: Full per-method param validation is deferred to Phase 3 when Zod schemas
-  // will be added for the MCP/HTTP API layer.
   private async dispatch(req: TwRequest): Promise<TwResponse> {
     const { request_id, method, params } = req
     try {
@@ -118,14 +99,10 @@ export class IpcServer {
       } else if (method === 'get_status') {
         data = await this.handler.getStatus(params as any)
       } else if (method === 'inbox_list') {
-        if (!this.inbox) {
-          throw Object.assign(new Error('Inbox not available'), { code: 'NOT_AVAILABLE' })
-        }
+        if (!this.inbox) throw Object.assign(new Error('Inbox not available'), { code: 'NOT_AVAILABLE' })
         data = await this.inbox.list({ unackedOnly: !!(params as any).unackedOnly })
       } else if (method === 'inbox_ack') {
-        if (!this.inbox) {
-          throw Object.assign(new Error('Inbox not available'), { code: 'NOT_AVAILABLE' })
-        }
+        if (!this.inbox) throw Object.assign(new Error('Inbox not available'), { code: 'NOT_AVAILABLE' })
         if (typeof (params as any).id !== 'string') {
           throw Object.assign(new Error('Missing required param: id'), { code: 'INVALID_PARAMS' })
         }
@@ -146,40 +123,6 @@ export class IpcServer {
         }
         const { artifact_path, section } = params as { artifact_path: string; section?: string }
         data = this.handler.resolveImpact(artifact_path, section)
-      } else if (method === 'harness_list') {
-        data = this.harnessLoader?.list() ?? []
-      } else if (method === 'harness_show') {
-        if (typeof (params as any).id !== 'string') {
-          throw Object.assign(new Error('Missing required param: id'), { code: 'INVALID_PARAMS' })
-        }
-        const { id } = params as { id: string }
-        const entry = this.harnessLoader?.get(id)
-        if (!entry) throw Object.assign(new Error(`Harness '${id}' not found`), { code: 'NOT_FOUND' })
-        data = entry
-      } else if (method === 'harness_run') {
-        if (typeof (params as any).entity_id !== 'string' || typeof (params as any).harness_id !== 'string') {
-          throw Object.assign(new Error('Missing required params: entity_id, harness_id'), { code: 'INVALID_PARAMS' })
-        }
-        const { entity_id, harness_id } = params as { entity_id: string; harness_id: string }
-        if (!this.harnessLoader || !this.triggerExecutor) {
-          throw Object.assign(new Error('Harness not available'), { code: 'NOT_AVAILABLE' })
-        }
-        const entry = this.harnessLoader.get(harness_id)
-        if (!entry) throw Object.assign(new Error(`Harness '${harness_id}' not found`), { code: 'NOT_FOUND' })
-        const entityResult = await this.handler.get({ id: entity_id })
-        if (!entityResult.ok) throw Object.assign(new Error(entityResult.error.message), { code: entityResult.error.code })
-        data = await this.triggerExecutor.runHarness(entityResult.data, entry)
-      } else if (method === 'feedback_query') {
-        if (!this.feedbackLog) throw Object.assign(new Error('FeedbackLog not available'), { code: 'NOT_AVAILABLE' })
-        data = this.feedbackLog.query(params as any)
-      } else if (method === 'feedback_summary') {
-        if (!this.feedbackLog) throw Object.assign(new Error('FeedbackLog not available'), { code: 'NOT_AVAILABLE' })
-        const harnessId = (params as any).harness_id
-        data = harnessId ? this.feedbackLog.getSummary(harnessId) : this.feedbackLog.getAllSummaries()
-      } else if (method === 'harness_validate') {
-        if (!this.harnessValidator) throw Object.assign(new Error('HarnessValidator not available'), { code: 'NOT_AVAILABLE' })
-        const entities = this.handler.getAllEntities()
-        data = this.harnessValidator.validate(entities)
       } else if (method === 'emit_event') {
         if (typeof (params as any).entity_id !== 'string') {
           throw Object.assign(new Error('Missing required param: entity_id'), { code: 'INVALID_PARAMS' })
@@ -193,14 +136,6 @@ export class IpcServer {
         const result = await this.handler.cascadeUpdate({ id, attributes: attributes ?? {}, cascade: cascade ?? false })
         if (!result.ok) throw Object.assign(new Error(result.error!.message), { code: result.error!.code })
         data = result.data
-      } else if (method === 'remediation_next') {
-        const remDir = (params as any).queue_dir as string | undefined
-        if (!remDir) throw Object.assign(new Error('Missing required param: queue_dir'), { code: 'INVALID_PARAMS' })
-        data = await this.handler.remediationNext(remDir)
-      } else if (method === 'remediation_done') {
-        const { rem_id, queue_dir } = params as { rem_id: string; queue_dir: string }
-        if (!rem_id || !queue_dir) throw Object.assign(new Error('Missing required params: rem_id, queue_dir'), { code: 'INVALID_PARAMS' })
-        data = await this.handler.remediationDone({ remId: rem_id, queueDir: queue_dir })
       } else if (method === 'trace_spans') {
         if (!this.traceQuery) throw Object.assign(new Error('TraceQueryEngine not available'), { code: 'NOT_AVAILABLE' })
         const { trace_id, entity_id } = params as { trace_id?: string; entity_id?: string }

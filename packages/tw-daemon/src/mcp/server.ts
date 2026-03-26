@@ -33,7 +33,6 @@ const TOOLS = [
         domain: { type: 'string' },
         depends_on: { type: 'array', items: { type: 'string' } },
         artifact_refs: { type: 'array' },
-        constraint_refs: { type: 'array', items: { type: 'string' } },
         attributes: { type: 'object' },
       },
       required: ['entity_type', 'id']

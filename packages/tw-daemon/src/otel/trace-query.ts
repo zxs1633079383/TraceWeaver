@@ -1,25 +1,21 @@
 import type { Entity, EntityState, EntityType, SpanMeta, SpanTreeNode, TraceInfo } from '@traceweaver/types'
 import type { SpanManager } from './span-manager.js'
-import type { FeedbackLog } from '../feedback/feedback-log.js'
 
 export interface TraceQueryEngineOptions {
   spanManager: SpanManager
   getAllEntities: () => Entity[]
   getEntity: (id: string) => Entity | undefined
-  feedbackLog: FeedbackLog
 }
 
 export class TraceQueryEngine {
   private readonly spanManager: SpanManager
   private readonly getAllEntities: () => Entity[]
   private readonly getEntity: (id: string) => Entity | undefined
-  private readonly feedbackLog: FeedbackLog
 
   constructor(opts: TraceQueryEngineOptions) {
     this.spanManager = opts.spanManager
     this.getAllEntities = opts.getAllEntities
     this.getEntity = opts.getEntity
-    this.feedbackLog = opts.feedbackLog
   }
 
   /** Find trace_id for an entity. Uses SpanManager first, then walks parent chain via EntityRegistry. */
@@ -51,27 +47,9 @@ export class TraceQueryEngine {
     const traceSpans = allSpans.filter(s => s.trace_id === traceId)
     if (traceSpans.length === 0) return null
 
-    // Cache feedback entries to avoid repeated queries
-    const feedbackByEntityId = new Map<string, Array<{ harness_id: string; result: 'pass' | 'fail'; reason?: string }>>()
-
-    const getFeedback = (entityId: string): Array<{ harness_id: string; result: 'pass' | 'fail'; reason?: string }> => {
-      if (!feedbackByEntityId.has(entityId)) {
-        const entries = this.feedbackLog.query({ entity_id: entityId })
-        feedbackByEntityId.set(entityId, entries
-          .filter(e => e.result === 'pass' || e.result === 'fail')
-          .map(e => ({
-            harness_id: e.harness_id,
-            result: e.result as 'pass' | 'fail',
-            reason: e.reason,
-          })))
-      }
-      return feedbackByEntityId.get(entityId)!
-    }
-
     const toNode = (span: SpanMeta): SpanTreeNode => {
       const entity = this.getEntity(span.entity_id)
       const state: EntityState = entity?.state ?? 'pending'
-      const harnessResults = getFeedback(span.entity_id)
 
       // Find children: spans whose parent_span_id == this span's span_id
       const childSpans = traceSpans.filter(s => s.parent_span_id === span.span_id)
@@ -89,7 +67,6 @@ export class TraceQueryEngine {
         status: span.status as 'OK' | 'ERROR' | 'UNSET',
         source: 'live',
         events: span.events ?? [],
-        harness_results: harnessResults.length > 0 ? harnessResults : undefined,
         children: childSpans.map(toNode),
       }
       return node
@@ -120,7 +97,6 @@ export class TraceQueryEngine {
     let pending = 0
     let rejected = 0
     const blocked: string[] = []
-    const harness_failures: Array<{ entity_id: string; harness_id: string; reason?: string }> = []
 
     const walk = (n: SpanTreeNode): void => {
       total++
@@ -141,12 +117,6 @@ export class TraceQueryEngine {
         }
       }
 
-      for (const hr of n.harness_results ?? []) {
-        if (hr.result === 'fail') {
-          harness_failures.push({ entity_id: n.entity_id, harness_id: hr.harness_id, reason: hr.reason })
-        }
-      }
-
       for (const child of n.children) walk(child)
     }
     walk(root)
@@ -161,22 +131,22 @@ export class TraceQueryEngine {
 
     const one_line =
       `${total} 实体中 ${completed} 完成` +
-      (rejectedIds.length > 0 ? `，${rejectedIds.join('/')} 被 harness 拒绝` : '') +
+      (rejectedIds.length > 0 ? `，${rejectedIds.join('/')} 被拒绝` : '') +
       (blocked.length > 0 ? `，${blocked.join('/')} 等待解锁` : '')
 
     const next_actions = [
-      ...harness_failures.map(f => `${f.entity_id}: ${f.reason ?? '未知原因'} → 修复后重新 review`),
-      ...blocked.map(id => `${id}: 等待上游修复后继续`),
+      ...rejectedIds.map(id => `${id}: 已拒绝 → 检查原因后修复`),
+      ...blocked.map(id => `${id}: 等待上游完成后继续`),
     ]
 
-    const error_refs = harness_failures.map(
-      f => `events.ndjson → entity_id=${f.entity_id}, type=entity.state_changed, state=rejected`
+    const error_refs = rejectedIds.map(
+      id => `events.ndjson → entity_id=${id}, type=entity.state_changed, state=rejected`
     )
 
     return {
       trace_id: traceId,
       root,
-      summary: { total, completed, in_progress, pending, rejected, blocked, harness_failures },
+      summary: { total, completed, in_progress, pending, rejected, blocked },
       _ai_context: { one_line, next_actions, error_refs },
     }
   }

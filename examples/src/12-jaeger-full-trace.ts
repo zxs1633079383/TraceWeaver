@@ -6,18 +6,16 @@
  *  Trace 链路：
  *    ✅ usecase span (root)
  *       └── plan span (child)
- *               ├── task-pass span (child) — Harness pass → status=OK
- *               └── task-fail span (child) — Harness fail → status=ERROR
+ *               ├── task-pass span (child) — completed → status=OK
+ *               └── task-fail span (child) — manually rejected → status=ERROR
  *
  *  每个 span 上的 events：
  *    ✅ state_changed_to_in_progress
  *    ✅ artifact.modified  (tw.file.path, tw.impact.type)
  *    ✅ state_changed_to_review
- *    ✅ harness:pass / harness:fail
  *    ✅ state_changed_to_completed / state_changed_to_rejected
  *
  *  配套系统：
- *    ✅ FeedbackLog — 评估历史 + consecutive_failures 趋势
  *    ✅ EventLog    — 全流程事件持久化
  *    ✅ InboxAdapter — 拒绝/通过通知
  *
@@ -35,7 +33,7 @@
  *   Operation = tw.usecase
  */
 
-import { mkdtemp, rm, mkdir, writeFile } from 'node:fs/promises'
+import { mkdtemp, rm, mkdir } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { randomUUID } from 'node:crypto'
@@ -44,11 +42,8 @@ import { CommandHandler } from '../../packages/tw-daemon/src/core/command-handle
 import { EventBus } from '../../packages/tw-daemon/src/core/event-bus/event-bus.js'
 import { SpanManager } from '../../packages/tw-daemon/src/otel/span-manager.js'
 import { EventLog } from '../../packages/tw-daemon/src/log/event-log.js'
-import { HarnessLoader } from '../../packages/tw-daemon/src/harness/loader.js'
-import { TriggerExecutor } from '../../packages/tw-daemon/src/trigger/executor.js'
-import { ConstraintEvaluator } from '../../packages/tw-daemon/src/constraint/evaluator.js'
 import { InboxAdapter } from '../../packages/tw-daemon/src/notify/inbox.js'
-import { FeedbackLog } from '../../packages/tw-daemon/src/feedback/feedback-log.js'
+import { NotifyEngine } from '../../packages/tw-daemon/src/notify/engine.js'
 import { ExporterRegistry } from '../../packages/tw-daemon/src/otel/exporter-registry.js'
 import { OtlpGrpcExporter } from '../../packages/tw-daemon/src/otel/exporter-grpc.js'
 
@@ -65,12 +60,6 @@ const ok      = (m: string) => console.log(`  ${C.green}✓${C.reset} ${m}`)
 const warn    = (m: string) => console.log(`  ${C.yellow}⚠${C.reset} ${m}`)
 const info    = (m: string) => console.log(`  ${C.gray}→${C.reset} ${m}`)
 const span_ok = (m: string) => console.log(`  ${C.blue}◆${C.reset} ${m}`)
-
-// ── Mock LLM：PASS_TAG 关键词 → pass，否则 fail ──────────────────────────────
-async function mockLlm(prompt: string): Promise<string> {
-  if (prompt.includes('PASS_TAG')) return 'RESULT: pass\n所有约束满足。'
-  return 'RESULT: fail\n缺少测试覆盖或审批标记。'
-}
 
 // ── 模拟文件变更事件（代替真实 FsWatcher）──────────────────────────────────
 function simulateFileChange(eventBus: EventBus, filePath: string): void {
@@ -90,10 +79,8 @@ async function main(): Promise<void> {
   console.log(`${C.cyan}PROJECT_ID     ${C.reset} = ${C.bold}${PROJECT_ID}${C.reset}\n`)
 
   const storeDir   = await mkdtemp(join(tmpdir(), 'tw-example-12-'))
-  const harnessDir = join(storeDir, 'harness')
   const inboxDir   = join(storeDir, 'inbox')
-  await mkdir(harnessDir, { recursive: true })
-  await mkdir(inboxDir,   { recursive: true })
+  await mkdir(inboxDir, { recursive: true })
 
   // ── Phase A：ExporterRegistry → 真实 Jaeger ──────────────────────────────
   section('Phase A：OtlpGrpcExporter → Jaeger')
@@ -105,65 +92,29 @@ async function main(): Promise<void> {
   ok(`ExporterRegistry 已注册 otlp-grpc exporter`)
   info(`endpoint: ${JAEGER_ENDPOINT}`)
 
-  // ── Phase B：Harness 文件 ─────────────────────────────────────────────────
-  section('Phase B：Harness 约束文件')
-
-  // pass harness：含 PASS_TAG → mock LLM 返回 pass
-  await writeFile(join(harnessDir, 'approved.md'), `---
-id: approved
-applies_to:
-  - task
-trigger_on:
-  - review
----
-# 审批约束
-
-任务必须含 PASS_TAG 标记表示已获审批。
-
-PASS_TAG
-`)
-
-  // fail harness：不含 PASS_TAG → mock LLM 返回 fail
-  await writeFile(join(harnessDir, 'needs-review.md'), `---
-id: needs-review
-applies_to:
-  - task
-trigger_on:
-  - review
----
-# 测试覆盖约束
-
-任务进入审核前必须包含测试文件引用。
-缺少测试文件将自动拒绝。
-`)
-
-  const harnessLoader = new HarnessLoader(harnessDir)
-  await harnessLoader.scan()
-  ok(`已加载 ${harnessLoader.list().length} 个 harness: ${harnessLoader.list().map(h => h.id).join(', ')}`)
-
-  // ── Phase C：组件初始化 ───────────────────────────────────────────────────
-  section('Phase C：组件初始化')
+  // ── Phase B：组件初始化 ───────────────────────────────────────────────────
+  section('Phase B：组件初始化')
 
   const spanManager = new SpanManager({ projectId: PROJECT_ID, exporterRegistry })
   const eventBus    = new EventBus({ batchWindowMs: 30 })
   const eventLog    = new EventLog(join(storeDir, 'events.ndjson'))
   eventLog.load()
   const inboxAdapter = new InboxAdapter(inboxDir)
-  const feedbackLog  = new FeedbackLog(join(storeDir, 'feedback.ndjson'))
-  feedbackLog.load()
 
   const handler = new CommandHandler({ storeDir, eventBus, spanManager, eventLog })
   await handler.init()
   eventBus.start()
 
-  const evaluator = new ConstraintEvaluator({ enabled: true, llmFn: mockLlm })
-  const triggerExecutor = new TriggerExecutor({
-    handler, evaluator, harness: harnessLoader,
-    eventBus, inbox: inboxAdapter, feedbackLog,
+  const notifyEngine = new NotifyEngine(eventBus, {
+    rules: [
+      { event: 'entity.state_changed', state: 'rejected' },
+      { event: 'entity.state_changed', state: 'completed' },
+    ],
+    inbox: inboxAdapter,
   })
-  triggerExecutor.start()
+  notifyEngine.start()
 
-  // 文件变更管道：复制 daemon/index.ts 中的 file.changed → artifact.modified + spanEvent
+  // 文件变更管道：file.changed → artifact.modified + spanEvent
   eventBus.subscribe(event => {
     if (event.type !== ('file.changed' as any)) return
     const filePath = event.attributes?.path as string | undefined
@@ -187,10 +138,10 @@ trigger_on:
     }
   })
 
-  ok('SpanManager(otlp-grpc)、EventBus、CommandHandler、TriggerExecutor 已就绪')
+  ok('SpanManager(otlp-grpc)、EventBus、CommandHandler、NotifyEngine 已就绪')
 
-  // ── Phase D：注册实体层级（parent_id 建立 span 父子关系）────────────────
-  section('Phase D：注册实体层级 → Jaeger span 父子关系')
+  // ── Phase C：注册实体层级（parent_id 建立 span 父子关系）────────────────
+  section('Phase C：注册实体层级 → Jaeger span 父子关系')
 
   // UseCase（root span）
   const uc = await handler.register({
@@ -215,7 +166,7 @@ trigger_on:
   })
   ok(`plan:    ${plan.id}  → child of usecase`)
 
-  // Task-pass（child of plan，绑定 approved harness → pass）
+  // Task-pass（child of plan，will complete normally）
   const taskPass = await handler.register({
     id: 'task-grpc-client',
     entity_type: 'task',
@@ -223,11 +174,10 @@ trigger_on:
     depends_on: ['plan-impl'],
     attributes: { title: 'gRPC 客户端实现' },
     artifact_refs: [{ type: 'code', path: 'src/otel/exporter-grpc.ts' }],
-    constraint_refs: ['approved'],
   })
-  ok(`task:    ${taskPass.id}  → approved harness (will PASS)`)
+  ok(`task:    ${taskPass.id}  → will complete normally`)
 
-  // Task-fail（child of plan，绑定 needs-review harness → fail）
+  // Task-fail（child of plan，will be manually rejected）
   const taskFail = await handler.register({
     id: 'task-no-tests',
     entity_type: 'task',
@@ -235,15 +185,14 @@ trigger_on:
     depends_on: ['plan-impl'],
     attributes: { title: '集成测试（缺测试）' },
     artifact_refs: [{ type: 'code', path: 'src/otel/exporter-grpc.ts' }],
-    constraint_refs: ['needs-review'],
   })
-  ok(`task:    ${taskFail.id}  → needs-review harness (will FAIL)`)
+  ok(`task:    ${taskFail.id}  → will be manually rejected`)
 
   const dag = await handler.getDagSnapshot({})
   info(`DAG: ${dag.nodes.length} 节点, ${dag.edges.length} 条边`)
 
-  // ── Phase E：模拟文件变更 → span events ──────────────────────────────────
-  section('Phase E：模拟文件变更 → artifact.modified span events')
+  // ── Phase D：模拟文件变更 → span events ──────────────────────────────────
+  section('Phase D：模拟文件变更 → artifact.modified span events')
 
   // docs/jaeger-prd.md 影响 usecase + plan（直接），tasks（传递）
   simulateFileChange(eventBus, 'docs/jaeger-prd.md')
@@ -255,22 +204,26 @@ trigger_on:
   await new Promise(r => setTimeout(r, 80))
   ok('src/otel/exporter-grpc.ts 变更 → artifact.modified events 写入两个 task span')
 
-  // ── Phase F：完整状态流转 → span events + Jaeger 导出 ───────────────────
-  section('Phase F：完整状态流转 → span export to Jaeger')
+  // ── Phase E：完整状态流转 → span events + Jaeger 导出 ───────────────────
+  section('Phase E：完整状态流转 → span export to Jaeger')
 
-  // task-pass: pending → in_progress → review → (TriggerExecutor: approved pass) → completed (手动)
+  // task-pass: pending → in_progress → review → completed
   await handler.updateState({ id: 'task-grpc-client', state: 'in_progress' })
   span_ok('task-grpc-client → in_progress  (span event)')
   await handler.updateState({ id: 'task-grpc-client', state: 'review' })
-  span_ok('task-grpc-client → review  [TriggerExecutor 触发 approved harness...]')
+  span_ok('task-grpc-client → review')
+  await handler.updateState({ id: 'task-grpc-client', state: 'completed' })
+  span_ok('task-grpc-client → completed  (span exported to Jaeger)')
 
-  // task-fail: pending → in_progress → review → (TriggerExecutor: needs-review fail) → auto-rejected
+  // task-fail: pending → in_progress → review → manually rejected
   await handler.updateState({ id: 'task-no-tests', state: 'in_progress' })
   span_ok('task-no-tests → in_progress  (span event)')
   await handler.updateState({ id: 'task-no-tests', state: 'review' })
-  span_ok('task-no-tests → review  [TriggerExecutor 触发 needs-review harness...]')
+  span_ok('task-no-tests → review')
+  await handler.updateState({ id: 'task-no-tests', state: 'rejected', reason: 'Missing tests' })
+  span_ok('task-no-tests → rejected  (manually rejected — ERROR span)')
 
-  // plan & usecase（无 task 级 harness，直接流转）
+  // plan & usecase
   await handler.updateState({ id: 'plan-impl', state: 'in_progress' })
   await handler.updateState({ id: 'plan-impl', state: 'review' })
   await handler.updateState({ id: 'plan-impl', state: 'completed' })
@@ -281,24 +234,13 @@ trigger_on:
   await handler.updateState({ id: 'uc-jaeger-demo', state: 'completed' })
   span_ok('uc-jaeger-demo → completed  (span exported to Jaeger)')
 
-  // 等待 TriggerExecutor 异步评估完成（approved → pass，needs-review → fail → auto-reject）
-  info('等待 TriggerExecutor 异步评估 + span 导出...')
-  await new Promise(r => setTimeout(r, 800))
+  await new Promise(r => setTimeout(r, 200))
 
-  // task-grpc-client harness 评估 pass → 手动推进到 completed（TriggerExecutor 不自动 complete）
-  const taskPassCheck = await handler.getStatus({ id: 'task-grpc-client' })
-  if (taskPassCheck.entity.state === 'review') {
-    await handler.updateState({ id: 'task-grpc-client', state: 'completed' })
-    span_ok('task-grpc-client → completed  [approved harness PASS → OK span]')
-  } else {
-    info(`task-grpc-client 当前状态: ${taskPassCheck.entity.state}（无需再推进）`)
-  }
-
-  triggerExecutor.stop()
+  notifyEngine.stop()
   eventBus.stop()
 
-  // ── Phase G：验证结果 ─────────────────────────────────────────────────────
-  section('Phase G：本地验证结果')
+  // ── Phase F：验证结果 ─────────────────────────────────────────────────────
+  section('Phase F：本地验证结果')
 
   const taskPassFinal = await handler.getStatus({ id: 'task-grpc-client' })
   const taskFailFinal = await handler.getStatus({ id: 'task-no-tests' })
@@ -307,25 +249,11 @@ trigger_on:
 
   ok(`usecase   state = ${ucFinal.entity.state}  [预期: completed]`)
   ok(`plan      state = ${planFinal.entity.state}  [预期: completed]`)
-  ok(`task-pass state = ${taskPassFinal.entity.state}  [预期: completed（harness approved pass）]`)
-  if (taskFailFinal.entity.state === 'rejected') {
-    ok(`task-fail state = ${taskFailFinal.entity.state}  [预期: rejected（harness needs-review fail）]`)
-  } else {
-    warn(`task-fail state = ${taskFailFinal.entity.state}  [预期 rejected，评估可能延迟]`)
-  }
+  ok(`task-pass state = ${taskPassFinal.entity.state}  [预期: completed]`)
+  ok(`task-fail state = ${taskFailFinal.entity.state}  [预期: rejected]`)
 
-  // ── Phase H：FeedbackLog 摘要 ────────────────────────────────────────────
-  section('Phase H：FeedbackLog 评估记录')
-
-  const allFeedback = feedbackLog.getHistory()
-  ok(`FeedbackLog 总记录: ${allFeedback.length} 条`)
-  for (const e of allFeedback) {
-    const icon = e.result === 'pass' ? '✓' : '✗'
-    info(`  ${icon} harness=${e.harness_id}  entity=${e.entity_id}  result=${e.result}  duration=${e.duration_ms}ms`)
-  }
-
-  // ── Phase I：Inbox ────────────────────────────────────────────────────────
-  section('Phase I：Inbox 通知')
+  // ── Phase G：Inbox 通知 ────────────────────────────────────────────────────
+  section('Phase G：Inbox 通知')
 
   const inboxItems = await inboxAdapter.list()
   ok(`收件箱消息: ${inboxItems.length} 条`)
@@ -333,8 +261,8 @@ trigger_on:
     info(`  [${item.acked ? 'acked' : '未读'}] ${item.message ?? item.event_type}`)
   }
 
-  // ── Phase J：获取 trace_id，给出 Jaeger 查询入口 ─────────────────────────
-  section('Phase J：Jaeger Trace 查询')
+  // ── Phase H：获取 trace_id，给出 Jaeger 查询入口 ─────────────────────────
+  section('Phase H：Jaeger Trace 查询')
 
   const ucSpan = spanManager.getSpan('uc-jaeger-demo')
   const traceId = ucSpan?.trace_id ?? '未知'
@@ -359,11 +287,11 @@ ${C.bold}${C.green}  Trace 导出完成！${C.reset}
   │ tw.usecase [uc-jaeger-demo]                OK  ■■■■■■■■  │
   │  └── tw.plan [plan-impl]                   OK  ■■■■■■    │
   │       ├── tw.task [task-grpc-client]        OK  ■■■■      │
-  │       │     events: artifact.modified(×2)              │
+  │       │     events: artifact.modified(x2)              │
   │       │             state_changed_to_review            │
   │       │             state_changed_to_completed         │
   │       └── tw.task [task-no-tests]          ERR ■■■       │
-  │             events: artifact.modified(×2)              │
+  │             events: artifact.modified(x2)              │
   │             state_changed_to_review                    │
   │             state_changed_to_rejected                  │
   └──────────────────────────────────────────────────────────┘

@@ -29,14 +29,12 @@ export function registerCommand(program: Command): void {
   cmd.command('plan <id>')
     .requiredOption('--parent <id>', 'Parent UseCase id')
     .option('--domain <domain>',     'Plan domain (frontend|backend|ui|qa|custom)')
-    .option('--constraint <path...>','Constraint file refs')
     .action(async (id: string, opts: any) => {
       await ensureDaemonRunning()
       const client = new IpcClient(getSocketPath())
       const res = await client.send({
         method: 'register',
-        params: { entity_type: 'plan', id, parent_id: opts.parent, domain: opts.domain,
-                  constraint_refs: opts.constraint },
+        params: { entity_type: 'plan', id, parent_id: opts.parent, domain: opts.domain },
       })
       if (res.ok) console.log(formatEntity(res.data as any))
       else        { console.error(res.error.message); process.exit(1) }
@@ -45,14 +43,13 @@ export function registerCommand(program: Command): void {
   cmd.command('task <id>')
     .requiredOption('--parent <id>',       'Parent Plan id')
     .option('--depends-on <ids...>',       'Dependency task ids')
-    .option('--constraint <paths...>',     'Constraint file refs')
     .action(async (id: string, opts: any) => {
       await ensureDaemonRunning()
       const client = new IpcClient(getSocketPath())
       const res = await client.send({
         method: 'register',
         params: { entity_type: 'task', id, parent_id: opts.parent,
-                  depends_on: opts.dependsOn, constraint_refs: opts.constraint },
+                  depends_on: opts.dependsOn },
       })
       if (res.ok) console.log(formatEntity(res.data as any))
       else        { console.error(res.error.message); process.exit(1) }

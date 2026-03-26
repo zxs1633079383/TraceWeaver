@@ -1,67 +1,68 @@
 # TraceWeaver
 
+**AI-Native Dev Process Observability Engine**
 **AI 原生研发流程可观测引擎**
 
-TraceWeaver 追踪研发实体（实验、假设、任务、制品）的完整生命周期，为 AI Agent 和工程师提供研发过程的实时可查询视图。
+TraceWeaver tracks the full lifecycle of UseCase -> Plan -> Task entities, giving AI Agents and engineers a real-time, queryable view of the development process — with OpenTelemetry traces exported to Jaeger.
+
+TraceWeaver 追踪 UseCase -> Plan -> Task 的完整生命周期，为 AI Agent 和工程师提供实时可查询的研发过程视图，并通过 OpenTelemetry 将 Trace 导出到 Jaeger。
 
 ---
 
-## 功能特性
+## Features / 功能特性
 
-- **状态机追踪** — 注册实体并推进其经历明确定义的生命周期状态（`pending`、`in_progress`、`completed`、`rejected`、`blocked`）
-- **OpenTelemetry 集成** — 每个实体映射到一个 OTel Span；状态变更自动触发事件和 Span 注解
-- **MCP Server** — 通过 stdio transport 为 AI Agent 提供一等公民的 Model Context Protocol 支持
-- **HTTP API** — 支持 Webhook 的 REST API，提供基于 Token 的鉴权，适用于 CI/CD 和外部集成
-- **通知引擎** — 可配置的收件箱和 Webhook 规则，在状态转换时触发（例如 `rejected`、`completed`）
-- **文件系统监听器** — 当被追踪的制品文件在磁盘上发生变更时，自动触发事件
-- **依赖 DAG** — 声明 `depends_on` 关系并查询实时实体图
-- **影响分析** — 解析当制品或文档某节内容变更时，哪些实体会受到影响
-- **持久化事件日志** — 基于 NDJSON 的事件日志在 Daemon 重启后仍然存活；支持按实体、类型、时间范围进行完整查询
-- **Span 指标** — 直接从 OTel Span 历史中推导出周期时间、失败率和吞吐量
-- **Harness 工程化** — 以代码形式管理约束文件（`.traceweaver/harness/*.md`）；在状态变更时自动验证实体，失败时自动拒绝
-- **自主 Agent 闭环** — AI Agent 可通过 CLI 或 MCP 实现 observe → detect → diagnose → validate → fix 的完整闭环
+- **Entity Lifecycle Tracking / 实体生命周期追踪** — Register entities and drive them through a well-defined state machine (`pending` -> `in_progress` -> `review` -> `completed` | `rejected`)
+- **OpenTelemetry Integration / OTel 集成** — Each entity maps to an OTel Span; state changes emit span events. Export to Jaeger via OTLP/gRPC
+- **Trace Query + `_ai_context` / 链路查询** — `tw trace info --json` returns a deterministic `_ai_context` field that tells AI Agents exactly what to do next
+- **Daily Reports / 日报生成** — `tw report daily` generates structured Markdown reports aggregating entity status, span trees, and AI context
+- **MCP Server** — First-class Model Context Protocol support for AI Agents (Claude, etc.) via stdio transport
+- **HTTP API** — Token-authenticated REST API for CI/CD and external integrations
+- **Notification Engine / 通知引擎** — Configurable inbox and webhook rules triggered on state transitions
+- **File Watcher / 文件监听** — Automatically detects when tracked artifact files change on disk
+- **DAG Dependencies / 依赖图** — Declare `depends_on` relationships; query the live entity graph; detect blocked entities
+- **Impact Analysis / 影响分析** — Resolve which entities are affected (directly + transitively) when an artifact file changes
+- **Persistent Event Log / 持久化事件日志** — NDJSON-based event log survives daemon restarts; full query by entity, type, and time range
+- **Span Metrics / 指标** — Cycle time, failure rate, and throughput derived directly from OTel span history
 
 ---
 
-## 架构图
+## Architecture / 架构
 
 ```
-  tw (CLI)
-     |
-     | Unix socket (IPC)
-     v
- tw-daemon
-     |
-     +---> CommandHandler
-     |          |
-     |          +---> EntityRegistry + DAG        # 实体注册表与依赖图
-     |          +---> WAL + FsStore               # 预写日志与文件存储
-     |          +---> EventBus                    # 事件总线
-     |          +---> ImpactResolver              # 文件 → 实体反向索引 + DAG 传播
-     |                    |
-     |                    +---> EventLog          # NDJSON 持久化日志
-     |                    +---> NotifyEngine --> InboxAdapter    # 本地收件箱
-     |                    |                 --> WebhookAdapter   # 外部 Webhook
-     |                    +---> FsWatcher         # 文件系统监听器
-     |                    +---> SpanManager (OTel) --> SpanMetrics  # OTel Span 与指标
-     |                    +---> HarnessLoader     # 加载 .traceweaver/harness/*.md
-     |                    +---> TriggerExecutor   # 自动验证 → 自动拒绝
-     |                              └─> ConstraintEvaluator (LLM 驱动)
-     |
-     +---> McpServer  (stdio，可选)
-     +---> HttpServer (端口，可选)
+tw (CLI)
+   |
+   | Unix socket (IPC)
+   v
+tw-daemon
+   |
+   +---> CommandHandler
+   |          |
+   |          +---> EntityRegistry + DAG
+   |          +---> WAL + FsStore
+   |          +---> EventBus
+   |          +---> ImpactResolver
+   |                    |
+   |                    +---> EventLog (NDJSON)
+   |                    +---> NotifyEngine --> InboxAdapter / WebhookAdapter
+   |                    +---> FsWatcher
+   |                    +---> SpanManager (OTel) --> SpanMetrics
+   |                    +---> TraceQueryEngine --> _ai_context
+   |                    +---> ReportGenerator + ReportScheduler
+   |
+   +---> McpServer  (stdio, optional)
+   +---> HttpServer (port, optional)
 ```
 
 ---
 
-## 安装
+## Install / 安装
 
 ```bash
 npm install
 npm run build
 ```
 
-全局安装 `tw` CLI：
+Global CLI install (optional but recommended / 全局安装 CLI，可选但推荐)：
 
 ```bash
 npm install -g .
@@ -69,59 +70,50 @@ npm install -g .
 
 ---
 
-## 快速开始
+## Quick Start / 快速开始
 
 ```bash
-# 注册一个新的实验实体
-tw register exp-001 --type experiment --title "基线性能基准"
+# Start the daemon / 启动守护进程
+tw daemon start
 
-# 更新实体状态
-tw update exp-001 --state in_progress
+# Register entities / 注册实体
+tw register usecase blog-v2 --prd docs/prd.md
+tw register plan plan-frontend --parent blog-v2 --domain frontend
+tw register task task-hero --parent plan-frontend
 
-# 查看所有实体状态
-tw status
+# Drive state transitions / 推进状态
+tw update task-hero --state in_progress
+tw update task-hero --state review
+tw update task-hero --state completed
 
-# 查看通知收件箱
-tw inbox
+# Query trace with AI context / 查询链路（含 AI 上下文）
+tw trace info --entity-id blog-v2 --json
 
-# 查询最近事件历史（持久化日志，Daemon 重启后仍可查询）
-tw log query --since 1h --entity exp-001 --type state_changed
+# Generate daily report / 生成日报
+tw report daily --all
 
-# 实时流式监听事件
-tw watch
-
-# 查看 Span 推导的指标数据
+# View metrics / 查看指标
 tw metrics --type task --window 24
 
-# 查看依赖关系图
-tw dag
+# Impact analysis / 影响分析
+tw impact src/auth.ts --json
 
-# 分析文档变更的影响范围
-tw impact ./docs/prd.md
-
-# Harness 工程化 —— 约束文件即代码
-tw harness list
-tw harness show test-coverage
-tw harness run exp-001 --harness-id test-coverage
-
-# 所有命令均支持 --json 输出机器可读格式
+# All commands support --json / 所有命令支持 --json
 tw status --json
-tw metrics --json
-tw harness list --json
+tw log query --since 1h --json
+tw inbox --json
 ```
+
+See [QUICKSTART.md](./QUICKSTART.md) for the full step-by-step guide.
+完整的分步教程请参阅 [QUICKSTART.md](./QUICKSTART.md)。
 
 ---
 
-## 配置说明
+## Configuration / 配置
 
-在项目根目录创建 `.traceweaver/config.yaml`：
+Create `.traceweaver/config.yaml` in your project root:
 
 ```yaml
-# .traceweaver/config.yaml
-
-store_dir: .traceweaver        # 实体和 WAL 的持久化目录
-socket_path: .traceweaver/tw.sock
-
 notify:
   rules:
     - event: entity.state_changed
@@ -133,33 +125,33 @@ notify:
     token: ${TW_WEBHOOK_TOKEN}
 
 otel:
-  project_id: my-project
-  exporter: console            # console | otlp
+  exporter: otlp-grpc          # console | otlp-http | otlp-grpc
+  endpoint: localhost:4317
 
-http:
-  port: 4321
-  inbound_token: ${TW_INBOUND_TOKEN}
+report:
+  schedule: "09:00"             # Auto-generate daily reports at 9am
+  output_dir: ~/.traceweaver/reports
+
+watch:
+  dirs: ["."]
 ```
 
-环境变量覆盖配置：
+### Environment Variables / 环境变量
 
-| 变量名 | 说明 |
-|---|---|
-| `TW_STORE` | 覆盖存储目录路径 |
-| `TW_SOCKET` | 覆盖 Socket 路径 |
-| `TW_HTTP_PORT` | 在指定端口启用 HTTP API |
-| `TW_INBOUND_TOKEN` | HTTP API 的 Bearer Token 鉴权 |
-| `TW_MCP_STDIO` | 设为 `1` 以启用 MCP stdio transport |
-| `TW_WEBHOOK_TOKEN` | 在 Webhook `Authorization` 请求头中发送的 Token |
-| `ANTHROPIC_API_KEY` | 启用 Harness 约束的 LLM 驱动评估 |
+| Variable | Description |
+|----------|-------------|
+| `TW_STORE` | Override storage directory (default: `.traceweaver`) |
+| `TW_SOCKET` | Override Unix socket path |
+| `TW_HTTP_PORT` | Enable HTTP API on specified port |
+| `TW_INBOUND_TOKEN` | HTTP API Bearer Token |
+| `TW_MCP_STDIO` | Set to `1` to enable MCP stdio transport |
+| `TW_WEBHOOK_TOKEN` | Token for webhook `Authorization` header |
 
 ---
 
-## Agent 集成
+## AI Agent Integration / AI Agent 集成
 
 ### MCP Server
-
-TraceWeaver 为 AI Agent（Claude、GPT-4 等）暴露完整的 MCP Server：
 
 ```json
 {
@@ -167,102 +159,65 @@ TraceWeaver 为 AI Agent（Claude、GPT-4 等）暴露完整的 MCP Server：
     "traceweaver": {
       "command": "tw",
       "args": ["daemon", "--mcp"],
-      "env": {
-        "TW_MCP_STDIO": "1",
-        "TW_STORE": "/path/to/your/project/.traceweaver"
-      }
+      "env": { "TW_MCP_STDIO": "1" }
     }
   }
 }
 ```
 
-暴露的 MCP 工具：`register_entity`、`update_state`、`update_attributes`、`get_status`、`query_events`、`get_dag`、`link_artifact`、`emit_event`
+Tools: `register_entity`, `update_state`, `get_status`, `query_events`, `get_dag`, `emit_event`
+
+### `_ai_context` — AI Agent Action Guide / AI Agent 行动指南
+
+`tw trace info --json` returns a deterministic `_ai_context` field:
+
+```json
+{
+  "one_line": "5 entities: 2 completed, task-bad rejected, task-blocked waiting",
+  "next_actions": ["task-bad: rejected -> fix and retry", "task-blocked: waiting for upstream"],
+  "error_refs": ["events.ndjson -> entity_id=task-bad, state=rejected"]
+}
+```
+
+AI Agents don't need to understand TraceWeaver internals — just read `_ai_context.next_actions`.
+AI Agent 无需理解 TraceWeaver 内部机制，只需读取 `_ai_context.next_actions` 即可知道下一步。
 
 ### HTTP API
 
-设置 `TW_HTTP_PORT` 后，Daemon 将暴露 REST API：
-
 ```
-Base URL: http://127.0.0.1:<TW_HTTP_PORT>
-
-POST   /entities              注册实体
-PATCH  /entities/:id/state    更新状态
-PATCH  /entities/:id/attrs    更新属性
-GET    /entities/:id          获取实体及子节点
-GET    /status                汇总统计
-POST   /events                触发自定义事件
-GET    /events                查询事件历史
-GET    /dag                   获取依赖关系图
+POST   /entities              Register entity
+PATCH  /entities/:id/state    Update state
+GET    /entities/:id          Get entity + children
+GET    /status                Summary stats
+GET    /dag                   Dependency graph
 ```
 
-当设置了 `TW_INBOUND_TOKEN` 时，所有请求需携带 `Authorization: Bearer <TW_INBOUND_TOKEN>`。
+Requires `Authorization: Bearer <TW_INBOUND_TOKEN>` when token is configured.
 
 ---
 
-## Harness 工程化
-
-Harness 是与项目代码一同存放的约束文件，采用带 YAML frontmatter 的 Markdown 格式。它们定义了每类实体"完成"的标准，Daemon 会自动执行这些约束。
-
-### Harness 文件格式
-
-在 `.traceweaver/harness/<id>.md` 创建约束文件：
-
-```markdown
----
-id: test-coverage
-applies_to:
-  - task
-trigger_on:
-  - review
-  - completed
----
-# 测试覆盖率约束
-
-所有任务必须包含测试文件。检查 artifact_refs 中是否至少有一项
-type 为 "test" 的条目。
-
-RESULT: 测试存在则通过，否则失败。
-```
-
-### 自动执行机制
-
-当实体到达 `trigger_on` 中列出的状态时，TriggerExecutor 会自动：
-
-1. 通过 ConstraintEvaluator 评估 Harness 约束（设置 `ANTHROPIC_API_KEY` 后由 LLM 驱动）
-2. **失败** → 自动将实体转换为 `rejected` 状态，并写入收件箱通知
-3. **通过** → 记录结果；实体继续其生命周期
-
-启用 AI 驱动评估：
-
-```bash
-export ANTHROPIC_API_KEY=sk-...
-```
-
-未设置该密钥时，评估器以禁用模式运行（不自动拒绝）。
-
-### 相关环境变量
-
-| 变量名 | 说明 |
-|---|---|
-| `ANTHROPIC_API_KEY` | 在 TriggerExecutor 中启用 LLM 驱动的约束评估 |
-
----
-
-## 自主 Agent 闭环
-
-Phase 5 完成了完整的 observe → detect → diagnose → validate → fix 闭环：
+## Observability Loop / 可观测闭环
 
 ```
 AI Agent
-  │
-  ├── tw log query --since 1h          # observe：发生了什么？
-  ├── tw metrics --type task           # detect：是否存在失败？
-  ├── tw impact src/auth.ts            # diagnose：哪些实体受影响？
-  ├── tw harness run <id> --harness-id # validate：是否满足约束条件？
-  └── tw update <id> --state completed # fix：条件满足时推进状态
+  |
+  +-- tw log query --since 1h        # observe: what happened?
+  +-- tw metrics --type task          # detect: any failures?
+  +-- tw impact src/auth.ts           # diagnose: which entities affected?
+  +-- tw trace info --json            # decide: what should I do next?
+  +-- tw update <id> --state ...      # fix: drive state forward
 ```
 
-所有命令均支持 `--json` 以供程序化使用。MCP Server 以工具形式暴露相同的操作（`tw_query_log`、`tw_get_metrics`、`tw_resolve_impact`、`tw_harness_run`）。
+---
+
+## Examples / 示例
+
+```bash
+npm run run:11 --workspace=examples   # Full observability loop / 全链路可观测闭环
+npm run run:12 --workspace=examples   # Jaeger OTLP/gRPC export / Jaeger 导出
+npm run run:13 --workspace=examples   # TaskMaster bridge / TaskMaster 联动
+npm run run:14 --workspace=examples   # Trace + Report E2E / 链路+日报端到端
+```
 
 ---
 

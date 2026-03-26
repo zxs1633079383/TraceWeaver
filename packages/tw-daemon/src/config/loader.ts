@@ -29,8 +29,6 @@
  *   port:          number
  *   inbound_token: string
  *
- * harness:
- *   dir: string                # default: <store_dir>/harness
  */
 
 import { readFileSync, existsSync } from 'node:fs'
@@ -69,10 +67,6 @@ export interface HttpConfig {
   inbound_token?: string
 }
 
-export interface HarnessConfig {
-  dir?: string
-}
-
 export interface IntegrationsConfig {
   /** 关掉 → Task/Plan 自成根 trace（默认 true） */
   usecase?: boolean
@@ -80,22 +74,6 @@ export interface IntegrationsConfig {
   plan_fanout?: boolean
   /** 关掉 → tw taskmaster 命令报错（默认 true） */
   taskmaster?: boolean
-  /** 关掉 → rejection 只通知 inbox，不自动修复（默认 true） */
-  remediation?: boolean
-  /** 关掉 → 纯 trace，不做约束评估（默认 true） */
-  harness?: boolean
-}
-
-export interface RemediationConfig {
-  enabled?: boolean
-  max_attempts?: number
-  /** queue | inline | notify_only（默认 queue） */
-  mode?: 'queue' | 'inline' | 'notify_only'
-  /**
-   * 限定只有从指定状态拒绝时才触发修复。
-   * 空数组或 undefined = 所有 rejected 均触发。
-   */
-  trigger_from_states?: string[]
 }
 
 export interface ReportConfig {
@@ -114,9 +92,7 @@ export interface TwConfig {
   notify?: NotifyConfig
   otel?: OtelConfig
   http?: HttpConfig
-  harness?: HarnessConfig
   integrations?: IntegrationsConfig
-  remediation?: RemediationConfig
   report?: ReportConfig
 }
 

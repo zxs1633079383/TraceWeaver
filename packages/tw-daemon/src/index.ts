@@ -12,12 +12,7 @@ import { InboxAdapter } from './notify/inbox.js'
 import { FsWatcher } from './watcher/fs-watcher.js'
 import { EventLog } from './log/event-log.js'
 import { SpanMetrics } from './metrics/span-metrics.js'
-import { HarnessLoader } from './harness/loader.js'
-import { TriggerExecutor } from './trigger/executor.js'
-import { ConstraintEvaluator } from './constraint/evaluator.js'
 import { loadConfig, resolveWatchDirs } from './config/loader.js'
-import { FeedbackLog } from './feedback/feedback-log.js'
-import { HarnessValidator } from './harness/validator.js'
 import { ExporterRegistry } from './otel/exporter-registry.js'
 import { ConsoleExporter } from './otel/exporter-console.js'
 import { OtlpHttpExporter } from './otel/exporter-http.js'
@@ -47,7 +42,6 @@ async function main() {
   eventLog.load()
 
   const exporterRegistry = new ExporterRegistry()
-  // Env vars take precedence over config.yaml
   const exporterType = process.env.TW_OTEL_EXPORTER ?? config.otel?.exporter ?? 'console'
   const exporterEndpoint = process.env.TW_OTEL_ENDPOINT ?? config.otel?.endpoint ?? 'localhost:4317'
 
@@ -65,21 +59,16 @@ async function main() {
   const handler = new CommandHandler({ storeDir: STORE_DIR, eventBus, spanManager, eventLog })
   await handler.init()
 
-  const feedbackLog = new FeedbackLog(join(STORE_DIR, 'feedback', 'feedback.ndjson'))
-  feedbackLog.load()
-
   const traceQuery = new TraceQueryEngine({
     spanManager,
     getAllEntities: () => handler.getAllEntities(),
     getEntity: (id: string) => handler.getEntityById(id),
-    feedbackLog,
   })
 
   const reportOutputDir = config?.report?.output_dir ?? join(homedir(), '.traceweaver', 'reports')
   const reportGenerator = new ReportGenerator({
     traceQuery,
     eventLog,
-    feedbackLog,
     outputDir: reportOutputDir,
   })
 
@@ -116,55 +105,13 @@ async function main() {
   notifyEngine.start()
 
   // Watch project files (NOT the store dir).
-  // Dirs come from config.watch.dirs, defaulting to project root.
   const watchDirs = resolveWatchDirs(config, PROJECT_ROOT, STORE_DIR)
   const fsWatcher = new FsWatcher(watchDirs, eventBus, {
     extraIgnored: config.watch?.ignored,
   })
   await fsWatcher.start()
 
-  const harnessLoader = new HarnessLoader(join(STORE_DIR, 'harness'))
-  await harnessLoader.scan()
-
-  const harnessValidator = new HarnessValidator(harnessLoader, feedbackLog)
-
-  // Initial alignment check on startup
-  const startupIssues = harnessValidator.validate(handler.getAllEntities())
-  for (const issue of startupIssues) {
-    await inbox.write({
-      event_type: 'entity.state_changed',
-      entity_id: 'system',
-      message: `[VALIDATOR] ${issue.severity.toUpperCase()}: ${issue.message}`,
-    })
-  }
-
-  // Watch harness dir for changes → rescan + revalidate
-  const harnessDir = join(STORE_DIR, 'harness')
-  const harnessWatcher = chokidar.watch(harnessDir, { ignoreInitial: true, persistent: false })
-  harnessWatcher.on('all', async () => {
-    await harnessLoader.scan()
-    const issues = harnessValidator.validate(handler.getAllEntities())
-    for (const issue of issues) {
-      await inbox.write({
-        event_type: 'entity.state_changed',
-        entity_id: 'system',
-        message: `[VALIDATOR] ${issue.severity.toUpperCase()}: ${issue.message}`,
-      })
-    }
-  })
-
-  const evaluator = new ConstraintEvaluator({
-    enabled: !!process.env.ANTHROPIC_API_KEY,
-    apiKey: process.env.ANTHROPIC_API_KEY,
-  })
-  const triggerExecutor = new TriggerExecutor({ handler, evaluator, harness: harnessLoader, eventBus, inbox, feedbackLog })
-  triggerExecutor.start()
-
   // ── file.changed → ImpactResolver → artifact.modified ──────────────────
-  // Standard pipeline: FsWatcher emits file.changed (from config.watch.dirs)
-  // → ImpactResolver maps file path to directly + transitively affected entities
-  // → emit artifact.modified per entity so the rest of the pipeline (NotifyEngine,
-  //   TriggerExecutor, EventLog) can react to it through the standard event bus.
   eventBus.subscribe(event => {
     if (event.type !== 'file.changed') return
     const filePath = event.attributes?.path as string | undefined
@@ -184,7 +131,6 @@ async function main() {
         ts: new Date().toISOString(),
         attributes: { trigger_file: filePath, impact_type: 'direct' },
       })
-      // Record file change as a span event so it appears in Jaeger trace
       spanManager.addEvent(entity.id, 'artifact.modified', {
         'tw.file.path': filePath,
         'tw.impact.type': 'direct',
@@ -199,7 +145,6 @@ async function main() {
         ts: new Date().toISOString(),
         attributes: { trigger_file: filePath, impact_type: 'transitive' },
       })
-      // Record transitive impact as a span event
       spanManager.addEvent(entity.id, 'artifact.modified', {
         'tw.file.path': filePath,
         'tw.impact.type': 'transitive',
@@ -207,7 +152,7 @@ async function main() {
     }
   })
 
-  // Conditional MCP startup (when spawned by MCP client with TW_MCP_STDIO=1)
+  // Conditional MCP startup
   if (process.env.TW_MCP_STDIO) {
     const { McpServer } = await import('./mcp/server.js')
     const mcp = new McpServer(handler)
@@ -229,10 +174,6 @@ async function main() {
     inbox,
     eventLog,
     spanMetrics,
-    harnessLoader,
-    triggerExecutor,
-    feedbackLog,
-    harnessValidator,
     traceQuery,
     reportGenerator,
   })
@@ -242,7 +183,7 @@ async function main() {
 
   console.log(`tw-daemon started. socket=${SOCKET_PATH} pid=${process.pid}`)
 
-  // Idle watchdog: shut down after 30 minutes of inactivity
+  // Idle watchdog
   const watchdog = setInterval(() => {
     if (Date.now() - lastActivity > IDLE_MS) {
       console.log('tw-daemon idle timeout — shutting down')
@@ -257,10 +198,8 @@ async function main() {
   async function cleanup(s: IpcServer, eb: EventBus) {
     clearInterval(watchdog)
     reportScheduler?.stop()
-    triggerExecutor.stop()
     notifyEngine.stop()
     await fsWatcher.stop()
-    await harnessWatcher.close()
     eb.stop()
     await s.stop()
     await exporterRegistry.shutdown()

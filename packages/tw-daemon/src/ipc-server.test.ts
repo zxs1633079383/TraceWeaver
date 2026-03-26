@@ -6,21 +6,16 @@ import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { IpcServer } from './ipc-server.js'
 import { CommandHandler } from './core/command-handler.js'
-import type { FeedbackEntry, FeedbackQuery, HarnessFeedbackSummary } from './feedback/feedback-log.js'
-import type { AlignmentIssue } from './harness/validator.js'
 
 let tmpDir: string
 let server: IpcServer
 
-async function startServer(opts?: {
-  feedbackLog?: { query: (q: FeedbackQuery) => FeedbackEntry[]; getSummary: (id: string) => HarnessFeedbackSummary; getAllSummaries: () => HarnessFeedbackSummary[] }
-  harnessValidator?: { validate: (entities: any[]) => AlignmentIssue[] }
-}) {
+async function startServer() {
   tmpDir = await mkdtemp(join(tmpdir(), 'tw-ipc-test-'))
   const handler = new CommandHandler(tmpDir)
   await handler.init()
   const socketPath = join(tmpDir, 'tw.sock')
-  server = new IpcServer(socketPath, handler, undefined, opts)
+  server = new IpcServer(socketPath, handler)
   await server.start()
   return { socketPath, handler }
 }
@@ -79,95 +74,6 @@ describe('IpcServer', () => {
     })
     expect(res.ok).toBe(false)
     expect(res.error.code).toBe('UNKNOWN_METHOD')
-  })
-
-  it('feedback_query dispatches to feedbackLog.query() and returns result', async () => {
-    const mockEntries: FeedbackEntry[] = [
-      {
-        id: 'entry-1',
-        seq: 1,
-        ts: '2024-01-01T00:00:00.000Z',
-        harness_id: 'my-harness',
-        entity_id: 'UC-001',
-        entity_type: 'usecase',
-        trigger_state: 'review',
-        result: 'pass',
-        reason: 'All checks passed',
-        duration_ms: 100,
-      },
-    ]
-    const mockFeedbackLog = {
-      query: (_q: FeedbackQuery) => mockEntries,
-      getSummary: (_id: string) => ({ harness_id: _id, total: 0, pass: 0, fail: 0, skipped: 0, failure_rate: 0, consecutive_failures: 0, recent_reasons: [], trend: 'unknown' as const, last_evaluated: '' }),
-      getAllSummaries: () => [],
-    }
-    const { socketPath } = await startServer({ feedbackLog: mockFeedbackLog })
-    const res = await sendRequest(socketPath, {
-      request_id: 'fq1',
-      method: 'feedback_query',
-      params: { harness_id: 'my-harness' },
-    })
-    expect(res.ok).toBe(true)
-    expect(Array.isArray(res.data)).toBe(true)
-    expect(res.data).toHaveLength(1)
-    expect(res.data[0].harness_id).toBe('my-harness')
-  })
-
-  it('feedback_summary with harness_id returns single summary', async () => {
-    const mockSummary: HarnessFeedbackSummary = {
-      harness_id: 'test-harness',
-      total: 5,
-      pass: 3,
-      fail: 2,
-      skipped: 0,
-      failure_rate: 0.4,
-      consecutive_failures: 1,
-      recent_reasons: ['timeout'],
-      trend: 'degrading',
-      last_evaluated: '2024-01-01T00:00:00.000Z',
-    }
-    const mockFeedbackLog = {
-      query: (_q: FeedbackQuery) => [],
-      getSummary: (_id: string) => mockSummary,
-      getAllSummaries: () => [],
-    }
-    const { socketPath } = await startServer({ feedbackLog: mockFeedbackLog })
-    const res = await sendRequest(socketPath, {
-      request_id: 'fs1',
-      method: 'feedback_summary',
-      params: { harness_id: 'test-harness' },
-    })
-    expect(res.ok).toBe(true)
-    expect(res.data.harness_id).toBe('test-harness')
-    expect(res.data.total).toBe(5)
-    expect(res.data.trend).toBe('degrading')
-  })
-
-  it('harness_validate returns AlignmentIssue array from validator', async () => {
-    const mockIssues: AlignmentIssue[] = [
-      {
-        severity: 'error',
-        type: 'orphaned_ref',
-        harness_id: 'missing-harness',
-        entity_id: 'UC-001',
-        message: "Entity 'UC-001' references non-existent harness 'missing-harness'",
-      },
-    ]
-    const mockValidator = {
-      validate: (_entities: any[]) => mockIssues,
-    }
-    const { socketPath } = await startServer({ harnessValidator: mockValidator })
-    const res = await sendRequest(socketPath, {
-      request_id: 'hv1',
-      method: 'harness_validate',
-      params: {},
-    })
-    expect(res.ok).toBe(true)
-    expect(Array.isArray(res.data)).toBe(true)
-    expect(res.data).toHaveLength(1)
-    expect(res.data[0].severity).toBe('error')
-    expect(res.data[0].type).toBe('orphaned_ref')
-    expect(res.data[0].harness_id).toBe('missing-harness')
   })
 
   it('emit_event adds span event and returns ok', async () => {

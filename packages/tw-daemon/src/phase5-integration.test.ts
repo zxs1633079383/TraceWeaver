@@ -1,6 +1,6 @@
 // packages/tw-daemon/src/phase5-integration.test.ts
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { mkdtempSync, rmSync, mkdirSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { CommandHandler } from './core/command-handler.js'
@@ -8,9 +8,6 @@ import { EventBus } from './core/event-bus/event-bus.js'
 import { SpanManager } from './otel/span-manager.js'
 import { EventLog } from './log/event-log.js'
 import { SpanMetrics } from './metrics/span-metrics.js'
-import { HarnessLoader } from './harness/loader.js'
-import { TriggerExecutor } from './trigger/executor.js'
-import { ConstraintEvaluator } from './constraint/evaluator.js'
 
 describe('Phase 5 integration', () => {
   let dir: string
@@ -66,34 +63,5 @@ describe('Phase 5 integration', () => {
     expect(summary).toHaveProperty('failureRate')
     expect(summary).toHaveProperty('throughput')
     expect(summary).toHaveProperty('activeSpans')
-  })
-
-  it('TriggerExecutor auto-rejects entity on harness fail', async () => {
-    const harnessDir = join(dir, 'harness')
-    mkdirSync(harnessDir)
-    writeFileSync(join(harnessDir, 'strict.md'), `---
-id: strict
-applies_to:
-  - task
-trigger_on:
-  - review
----
-Always fail.
-`)
-    const harness = new HarnessLoader(harnessDir)
-    await harness.scan()
-
-    const evaluator = new ConstraintEvaluator({ enabled: true, llmFn: async () => 'RESULT: fail\nViolation' })
-    const executor = new TriggerExecutor({ handler, evaluator, harness, eventBus })
-    executor.start()
-
-    await handler.register({ id: 'auto-1', entity_type: 'task', constraint_refs: ['strict'] })
-    await handler.updateState({ id: 'auto-1', state: 'in_progress' })
-    await handler.updateState({ id: 'auto-1', state: 'review' })
-    await new Promise(r => setTimeout(r, 400))
-    executor.stop()
-
-    const status = await handler.getStatus({ id: 'auto-1' })
-    expect(status.entity.state).toBe('rejected')
   })
 })

@@ -30,7 +30,6 @@ export interface Entity {
   domain?: string           // plan only
   depends_on?: string[]
   artifact_refs?: ArtifactRef[]
-  constraint_refs?: string[]
   attributes?: Record<string, unknown>
   created_at: string        // ISO8601
   updated_at: string        // ISO8601
@@ -67,7 +66,6 @@ export interface RegisterParams {
   domain?: string
   depends_on?: string[]
   artifact_refs?: ArtifactRef[]
-  constraint_refs?: string[]
   attributes?: Record<string, unknown>
 }
 
@@ -246,20 +244,6 @@ export interface NotifyDeliveryConfig {
   dead_letter: 'inbox' | 'discard'
 }
 
-export type ConstraintCheckStatus = 'pass' | 'fail' | 'skipped'
-
-export interface ConstraintCheckResult {
-  ref: string
-  result: ConstraintCheckStatus
-  note: string
-}
-
-export interface ConstraintValidationResult {
-  result: ConstraintCheckStatus
-  checked_at: string
-  refs_checked: ConstraintCheckResult[]
-}
-
 // ─── Trace Query ──────────────────────────────────────────────────────────────
 
 export interface SpanTreeNode {
@@ -275,11 +259,6 @@ export interface SpanTreeNode {
   status: 'OK' | 'ERROR' | 'UNSET'
   source: 'live' | 'reconstructed' // SpanManager vs EntityRegistry fallback
   events: SpanEvent[]              // in reconstructed mode, rebuilt from EventLog (can be empty array)
-  harness_results?: Array<{
-    harness_id: string
-    result: 'pass' | 'fail'
-    reason?: string
-  }>
   children: SpanTreeNode[]
 }
 
@@ -293,11 +272,6 @@ export interface TraceInfo {
     pending: number
     rejected: number
     blocked: string[]
-    harness_failures: Array<{
-      entity_id: string
-      harness_id: string
-      reason?: string
-    }>
   }
   _ai_context: {
     one_line: string       // deterministic template, no LLM call

@@ -4,12 +4,10 @@ import { randomUUID } from 'node:crypto'
 import type { ReportMeta, SpanTreeNode } from '@traceweaver/types'
 import type { TraceQueryEngine } from '../otel/trace-query.js'
 import type { EventLog } from '../log/event-log.js'
-import type { FeedbackLog } from '../feedback/feedback-log.js'
 
 export interface ReportGeneratorOptions {
   traceQuery: TraceQueryEngine
   eventLog: EventLog
-  feedbackLog: FeedbackLog
   outputDir: string
 }
 
@@ -22,13 +20,11 @@ export interface GenerateOptions {
 export class ReportGenerator {
   private readonly traceQuery: TraceQueryEngine
   private readonly eventLog: EventLog
-  private readonly feedbackLog: FeedbackLog
   private readonly outputDir: string
 
   constructor(opts: ReportGeneratorOptions) {
     this.traceQuery = opts.traceQuery
     this.eventLog = opts.eventLog
-    this.feedbackLog = opts.feedbackLog
     this.outputDir = opts.outputDir
   }
 
@@ -96,11 +92,9 @@ export class ReportGenerator {
     const results: ReportMeta[] = []
 
     for (const file of mdFiles) {
-      // Filename format: {YYYY}-{MM}-{DD}-{traceId8}.md
-      // Split on '-': parts[0]=YYYY, parts[1]=MM, parts[2]=DD, parts[3..]=traceId8 segments
-      const nameWithoutExt = file.slice(0, -3)  // remove .md
+      const nameWithoutExt = file.slice(0, -3)
       const parts = nameWithoutExt.split('-')
-      if (parts.length < 4) continue  // date has 3 parts: YYYY-MM-DD
+      if (parts.length < 4) continue
       const fileDate = parts.slice(0, 3).join('-')
       const traceId = parts.slice(3).join('-')
       const path = join(this.outputDir, file)
@@ -125,7 +119,6 @@ export class ReportGenerator {
         pending?: number
         rejected?: number
         blocked?: string[]
-        harness_failures?: Array<{ entity_id: string; harness_id: string; reason?: string }>
       }
       _ai_context?: {
         one_line: string
@@ -150,20 +143,10 @@ export class ReportGenerator {
       `- rejected: ${summary?.rejected ?? '?'}`,
       `- blocked: ${JSON.stringify(summary?.blocked ?? [])}`,
       '',
-      '## Harness Failures',
+      '## Span Tree',
       '',
     ]
 
-    const failures = summary?.harness_failures ?? []
-    if (failures.length === 0) {
-      lines.push('None.')
-    } else {
-      for (const f of failures) {
-        lines.push(`- ${f.entity_id}: ${f.harness_id} — ${f.reason ?? 'unknown'}`)
-      }
-    }
-
-    lines.push('', '## Span Tree', '')
     const renderNode = (node: SpanTreeNode, indent = ''): void => {
       lines.push(`${indent}[${node.entity_type}] ${node.entity_id} (${node.state})`)
       for (const child of node.children) renderNode(child, indent + '  ')
