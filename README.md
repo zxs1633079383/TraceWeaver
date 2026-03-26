@@ -1,32 +1,31 @@
 # TraceWeaver
 
 **AI-Native Dev Process Observability Engine**
-**AI 原生研发流程可观测引擎**
+
+[中文文档](./README.zh-CN.md)
 
 TraceWeaver tracks the full lifecycle of UseCase -> Plan -> Task entities, giving AI Agents and engineers a real-time, queryable view of the development process — with OpenTelemetry traces exported to Jaeger.
 
-TraceWeaver 追踪 UseCase -> Plan -> Task 的完整生命周期，为 AI Agent 和工程师提供实时可查询的研发过程视图，并通过 OpenTelemetry 将 Trace 导出到 Jaeger。
-
 ---
 
-## Features / 功能特性
+## Features
 
-- **Entity Lifecycle Tracking / 实体生命周期追踪** — Register entities and drive them through a well-defined state machine (`pending` -> `in_progress` -> `review` -> `completed` | `rejected`)
-- **OpenTelemetry Integration / OTel 集成** — Each entity maps to an OTel Span; state changes emit span events. Export to Jaeger via OTLP/gRPC
-- **Trace Query + `_ai_context` / 链路查询** — `tw trace info --json` returns a deterministic `_ai_context` field that tells AI Agents exactly what to do next
-- **Daily Reports / 日报生成** — `tw report daily` generates structured Markdown reports aggregating entity status, span trees, and AI context
+- **Entity Lifecycle Tracking** — Register entities and drive them through a state machine (`pending` -> `in_progress` -> `review` -> `completed` | `rejected`)
+- **OpenTelemetry Integration** — Each entity maps to an OTel Span; state changes emit span events. Export to Jaeger via OTLP/gRPC
+- **Trace Query + `_ai_context`** — `tw trace info --json` returns a deterministic `_ai_context` field that tells AI Agents exactly what to do next
+- **Daily Reports** — `tw report daily` generates structured Markdown reports aggregating entity status, span trees, and AI context
 - **MCP Server** — First-class Model Context Protocol support for AI Agents (Claude, etc.) via stdio transport
 - **HTTP API** — Token-authenticated REST API for CI/CD and external integrations
-- **Notification Engine / 通知引擎** — Configurable inbox and webhook rules triggered on state transitions
-- **File Watcher / 文件监听** — Automatically detects when tracked artifact files change on disk
-- **DAG Dependencies / 依赖图** — Declare `depends_on` relationships; query the live entity graph; detect blocked entities
-- **Impact Analysis / 影响分析** — Resolve which entities are affected (directly + transitively) when an artifact file changes
-- **Persistent Event Log / 持久化事件日志** — NDJSON-based event log survives daemon restarts; full query by entity, type, and time range
-- **Span Metrics / 指标** — Cycle time, failure rate, and throughput derived directly from OTel span history
+- **Notification Engine** — Configurable inbox and webhook rules triggered on state transitions
+- **File Watcher** — Automatically detects when tracked artifact files change on disk
+- **DAG Dependencies** — Declare `depends_on` relationships; query the live entity graph; detect blocked entities
+- **Impact Analysis** — Resolve which entities are affected (directly + transitively) when an artifact file changes
+- **Persistent Event Log** — NDJSON-based event log survives daemon restarts; full query by entity, type, and time range
+- **Span Metrics** — Cycle time, failure rate, and throughput derived directly from OTel span history
 
 ---
 
-## Architecture / 架构
+## Architecture
 
 ```
 tw (CLI)
@@ -55,14 +54,14 @@ tw-daemon
 
 ---
 
-## Install / 安装
+## Install
 
 ```bash
 npm install
 npm run build
 ```
 
-Global CLI install (optional but recommended / 全局安装 CLI，可选但推荐)：
+Global CLI install (optional but recommended):
 
 ```bash
 npm install -g .
@@ -70,46 +69,45 @@ npm install -g .
 
 ---
 
-## Quick Start / 快速开始
+## Quick Start
 
 ```bash
-# Start the daemon / 启动守护进程
+# Start the daemon
 tw daemon start
 
-# Register entities / 注册实体
+# Register entities
 tw register usecase blog-v2 --prd docs/prd.md
 tw register plan plan-frontend --parent blog-v2 --domain frontend
 tw register task task-hero --parent plan-frontend
 
-# Drive state transitions / 推进状态
+# Drive state transitions
 tw update task-hero --state in_progress
 tw update task-hero --state review
 tw update task-hero --state completed
 
-# Query trace with AI context / 查询链路（含 AI 上下文）
+# Query trace with AI context
 tw trace info --entity-id blog-v2 --json
 
-# Generate daily report / 生成日报
+# Generate daily report
 tw report daily --all
 
-# View metrics / 查看指标
+# View metrics
 tw metrics --type task --window 24
 
-# Impact analysis / 影响分析
+# Impact analysis
 tw impact src/auth.ts --json
 
-# All commands support --json / 所有命令支持 --json
+# All commands support --json
 tw status --json
 tw log query --since 1h --json
 tw inbox --json
 ```
 
 See [QUICKSTART.md](./QUICKSTART.md) for the full step-by-step guide.
-完整的分步教程请参阅 [QUICKSTART.md](./QUICKSTART.md)。
 
 ---
 
-## Configuration / 配置
+## Configuration
 
 Create `.traceweaver/config.yaml` in your project root:
 
@@ -136,7 +134,7 @@ watch:
   dirs: ["."]
 ```
 
-### Environment Variables / 环境变量
+### Environment Variables
 
 | Variable | Description |
 |----------|-------------|
@@ -149,7 +147,7 @@ watch:
 
 ---
 
-## AI Agent Integration / AI Agent 集成
+## AI Agent Integration
 
 ### MCP Server
 
@@ -167,7 +165,7 @@ watch:
 
 Tools: `register_entity`, `update_state`, `get_status`, `query_events`, `get_dag`, `emit_event`
 
-### `_ai_context` — AI Agent Action Guide / AI Agent 行动指南
+### `_ai_context` — AI Agent Action Guide
 
 `tw trace info --json` returns a deterministic `_ai_context` field:
 
@@ -180,7 +178,6 @@ Tools: `register_entity`, `update_state`, `get_status`, `query_events`, `get_dag
 ```
 
 AI Agents don't need to understand TraceWeaver internals — just read `_ai_context.next_actions`.
-AI Agent 无需理解 TraceWeaver 内部机制，只需读取 `_ai_context.next_actions` 即可知道下一步。
 
 ### HTTP API
 
@@ -196,7 +193,7 @@ Requires `Authorization: Bearer <TW_INBOUND_TOKEN>` when token is configured.
 
 ---
 
-## Observability Loop / 可观测闭环
+## Observability Loop
 
 ```
 AI Agent
@@ -210,13 +207,13 @@ AI Agent
 
 ---
 
-## Examples / 示例
+## Examples
 
 ```bash
-npm run run:11 --workspace=examples   # Full observability loop / 全链路可观测闭环
-npm run run:12 --workspace=examples   # Jaeger OTLP/gRPC export / Jaeger 导出
-npm run run:13 --workspace=examples   # TaskMaster bridge / TaskMaster 联动
-npm run run:14 --workspace=examples   # Trace + Report E2E / 链路+日报端到端
+npm run run:11 --workspace=examples   # Full observability loop
+npm run run:12 --workspace=examples   # Jaeger OTLP/gRPC export
+npm run run:13 --workspace=examples   # TaskMaster bridge
+npm run run:14 --workspace=examples   # Trace + Report E2E
 ```
 
 ---

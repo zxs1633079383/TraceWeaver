@@ -1,19 +1,19 @@
-# Quick Start Guide / 快速上手指南
+# Quick Start Guide
+
+[中文版](./QUICKSTART.zh-CN.md)
 
 TraceWeaver is a lightweight, local-first entity tracking system for AI-assisted dev workflows. It includes a state machine, event bus, DAG dependencies, notification engine, and OpenTelemetry export — all backed by an append-only WAL, accessible via CLI, programmatic API, MCP Server, or HTTP.
 
-TraceWeaver 是一款轻量级、本地优先的实体追踪系统，专为 AI 辅助研发工作流设计。内置状态机、事件总线、DAG 依赖图、通知引擎和 OpenTelemetry 导出，基于追加写入的 WAL，可通过 CLI、编程 API、MCP Server 或 HTTP 操作。
-
 ---
 
-## Prerequisites / 前置条件
+## Prerequisites
 
 - **Node.js** v18+
 - **npm** v9+ (workspaces support)
 
 ---
 
-## Install / 安装
+## Install
 
 ```bash
 git clone https://github.com/anthropics/traceweaver.git
@@ -22,7 +22,7 @@ npm install
 npm run build
 ```
 
-Optional global CLI install / 可选全局安装：
+Optional global CLI install:
 
 ```bash
 npm install -g .
@@ -31,22 +31,21 @@ npm install -g .
 
 ---
 
-## Core Concepts / 核心概念
+## Core Concepts
 
-### Entities / 实体
+### Entities
 
 Every work unit in TraceWeaver is an **entity** with three built-in types:
-TraceWeaver 中的每个工作单元都是一个**实体**，有三种类型：
 
-| Type / 类型 | Purpose / 用途 |
-|-------------|---------------|
-| `usecase` | High-level goal or project / 高层目标 |
-| `plan` | Execution plan under a usecase / 执行计划 |
-| `task` | Atomic work item under a plan / 原子工作项 |
+| Type | Purpose |
+|------|---------|
+| `usecase` | High-level goal or project |
+| `plan` | Execution plan under a usecase |
+| `task` | Atomic work item under a plan |
 
 Entities form a parent-child tree: `usecase` -> `plan` -> `task`.
 
-### State Machine / 状态机
+### State Machine
 
 ```
 pending --> in_progress --> review --> completed
@@ -59,31 +58,29 @@ pending --> in_progress --> review --> completed
 | `pending` | `in_progress`, `rejected` |
 | `in_progress` | `review`, `rejected` |
 | `review` | `completed`, `rejected` |
-| `completed` | — (terminal / 终态) |
-| `rejected` | — (terminal / 终态) |
+| `completed` | — (terminal) |
+| `rejected` | — (terminal) |
 
 Invalid transitions throw `TransitionError`.
 
-### Event Bus / 事件总线
+### Event Bus
 
 Every state change emits a typed event to the in-process `EventBus`. Events are persisted to WAL for query and replay.
-每次状态变更都会发出事件，同时持久化到 WAL，支持查询和回放。
 
-### DAG Dependencies / 依赖图
+### DAG Dependencies
 
 Entities can declare `depends_on` relationships. TraceWeaver tracks the resulting DAG and reports which entities are blocked.
-实体可声明 `depends_on` 关系，TraceWeaver 追踪 DAG 并报告阻塞状态。
 
 ---
 
-## Step 1: Start the Daemon / 启动 Daemon
+## Step 1: Start the Daemon
 
 ```bash
 tw daemon start
 tw status
 ```
 
-Expected output / 期望输出：
+Expected output:
 
 ```
 total: 0  pending: 0  in_progress: 0  review: 0  completed: 0  rejected: 0
@@ -91,18 +88,15 @@ total: 0  pending: 0  in_progress: 0  review: 0  completed: 0  rejected: 0
 
 ---
 
-## Step 2: Register Entities / 注册实体
+## Step 2: Register Entities
 
 ```bash
-# Register a usecase / 注册用例
 tw register usecase blog-v2 --prd docs/prd.md
-
-# Create a plan and task / 创建计划和任务
 tw register plan plan-frontend --parent blog-v2 --domain frontend
 tw register task task-hero --parent plan-frontend
 ```
 
-Check status / 查看状态：
+Check status:
 
 ```bash
 tw status
@@ -111,7 +105,7 @@ tw status --json
 
 ---
 
-## Step 3: State Transitions / 状态流转
+## Step 3: State Transitions
 
 ```bash
 tw update task-hero --state in_progress
@@ -119,7 +113,7 @@ tw update task-hero --state review
 tw update task-hero --state completed
 ```
 
-Output / 输出：
+Output:
 
 ```
 task-hero: pending -> in_progress
@@ -129,31 +123,29 @@ task-hero: review -> completed
 
 ---
 
-## Step 4: Event Log / 事件日志
+## Step 4: Event Log
 
 Events are persisted to NDJSON and survive daemon restarts.
-事件持久化到 NDJSON，daemon 重启后仍可查询。
 
 ```bash
-# Query recent events / 查询最近事件
+# Query recent events
 tw log query --since 1h
 
-# Filter by entity / 按实体过滤
+# Filter by entity
 tw log query --since 1h --entity blog-v2
 
-# Filter by event type / 按事件类型过滤
+# Filter by event type
 tw log query --since 1h --type state_changed
 
-# Live event stream / 实时事件流 (Ctrl+C to exit)
+# Live event stream (Ctrl+C to exit)
 tw watch --json
 ```
 
 ---
 
-## Step 5: Metrics / 指标
+## Step 5: Metrics
 
 Derived directly from OTel spans — no extra setup.
-直接从 OTel Span 推导，无需额外配置。
 
 ```bash
 tw metrics
@@ -161,22 +153,20 @@ tw metrics --type task --window 24 --json
 ```
 
 Includes: cycle time, failure rate, throughput.
-包含：周期时间、失败率、吞吐量。
 
 ---
 
-## Step 6: Trace Query / 链路查询
+## Step 6: Trace Query
 
 ```bash
-# Span tree visualization / Span 树可视化
+# Span tree visualization
 tw trace spans --entity-id blog-v2
 
-# Full trace info with AI context / 完整链路 + AI 上下文
+# Full trace info with AI context
 tw trace info --entity-id blog-v2 --json
 ```
 
 The `_ai_context` field tells AI Agents what to do next:
-`_ai_context` 字段告诉 AI Agent 下一步该做什么：
 
 ```json
 {
@@ -188,38 +178,31 @@ The `_ai_context` field tells AI Agents what to do next:
 
 ---
 
-## Step 7: Daily Reports / 日报
+## Step 7: Daily Reports
 
 ```bash
-# Generate report for all traces / 为所有 trace 生成日报
 tw report daily --all
-
-# List generated reports / 列出已生成报告
 tw report list --date 2026-03-26
-
-# View report content / 查看报告内容
 tw report show --date 2026-03-26
 ```
 
 Reports are atomic-written Markdown files with entity summaries, span trees, and AI context.
-日报是原子写入的 Markdown 文件，包含实体汇总、Span 树和 AI 上下文。
 
 ---
 
-## Step 8: Dependencies & Impact / 依赖与影响分析
+## Step 8: Dependencies & Impact
 
 ```bash
-# View dependency graph / 查看依赖图
+# View dependency graph
 tw dag
 
 # Impact analysis: which entities are affected by a file change?
-# 影响分析：文件变更影响哪些实体？
 tw impact src/auth.ts --json
 ```
 
 ---
 
-## Step 9: Notifications / 通知
+## Step 9: Notifications
 
 ```bash
 tw inbox
@@ -240,21 +223,21 @@ notify:
 
 ---
 
-## What's Next / 下一步
+## What's Next
 
 - **CLI Reference** — `tw --help` or `tw <command> --help`
-- **Examples / 示例** — see [`examples/src/`](./examples/src/):
-  - `01-basic-entity-lifecycle.ts` — Basic lifecycle / 基础生命周期
-  - `11-full-chain-autonomous-loop.ts` — Full observability loop / 全链路闭环
-  - `14-trace-report-e2e.ts` — Trace + Report E2E / 链路+日报端到端
+- **Examples** — see [`examples/src/`](./examples/src/):
+  - `01-basic-entity-lifecycle.ts` — Basic lifecycle
+  - `11-full-chain-autonomous-loop.ts` — Full observability loop
+  - `14-trace-report-e2e.ts` — Trace + Report E2E
 - **HTTP API** — `TW_HTTP_PORT=4321 tw daemon start`
 - **MCP Server** — `TW_MCP_STDIO=1 tw daemon --mcp`
 
 ---
 
-## Troubleshooting / 常见问题
+## Troubleshooting
 
-### Daemon not starting / Daemon 未启动
+### Daemon not starting
 
 ```bash
 ps aux | grep tw
@@ -262,14 +245,14 @@ tw daemon start
 # Check logs: .traceweaver/daemon.log
 ```
 
-### Socket in use / Socket 被占用
+### Socket in use
 
 ```bash
 rm -f .traceweaver/tw.sock
 tw daemon start
 ```
 
-### WAL recovery / WAL 恢复
+### WAL recovery
 
 ```bash
 npm run run:10 --workspace=examples   # WAL recovery demo

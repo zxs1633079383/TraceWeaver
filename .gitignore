@@ -27,4 +27,6 @@ package-lock.json
 # Only README.md and QUICKSTART.md are tracked
 **/*.md
 !README.md
+!README.zh-CN.md
 !QUICKSTART.md
+!QUICKSTART.zh-CN.md
