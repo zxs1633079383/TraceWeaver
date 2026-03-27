@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+export LC_ALL=C
 
 # PostToolUse hook: capture hot signals from CC tool calls
 # Appends structured NDJSON to docs/harness/experience.ndjson
@@ -33,7 +34,8 @@ main() {
     Bash)
       if [[ -n "${exit_code}" && "${exit_code}" != "0" ]]; then
         signal_type="error"
-        signal="${tool_input}"
+        signal="$(extract_json_string_field "${tool_input}" "command")"
+        [ -z "${signal}" ] && signal="${tool_input}"  # fallback if no command field
         context="exit_code=${exit_code}"
         resolution="${tool_output}"
         module="$(detect_module "${tool_input}")"
@@ -43,6 +45,8 @@ main() {
         # Extract test count from output (e.g. "Tests: 5 passed" or "x passed")
         local test_count=""
         test_count="$(printf '%s' "${tool_output}" | grep -oE '[0-9]+ passed' | head -1 || true)"
+        # Extract just the number
+        test_count="$(printf '%s' "${test_count}" | grep -oE '[0-9]+' | head -1 || true)"
         context="tests=${test_count:-unknown}"
         resolution=""
         module="$(detect_module "${tool_input}")"
@@ -102,6 +106,18 @@ main() {
   printf '{"ts":"%s","session_id":"%s","type":"%s","module":"%s","signal":"%s","context":"%s","resolution":"%s"}\n' \
     "${ts}" "${session_id}" "${signal_type}" "${module}" "${signal}" "${context}" "${resolution}" \
     >> "${outfile}"
+}
+
+# Generic JSON string field extractor (pure bash, no jq)
+# Usage: extract_json_string_field <json_string> <field_name>
+extract_json_string_field() {
+  local json="$1"
+  local field="$2"
+  local rest="${json#*\"${field}\"}"      # strip up to and including "field"
+  [ "${rest}" = "${json}" ] && printf '' && return  # field not found
+  rest="${rest#*:}"                        # strip colon
+  rest="${rest#*\"}"                       # strip opening quote
+  printf '%s' "${rest%%\"*}"              # extract up to closing quote
 }
 
 extract_file_path() {
