@@ -101,11 +101,25 @@ bump_hit_count_in_file() {
   signal_line="$(grep -nF "${signal}" "${file}" 2>/dev/null | head -1 | cut -d: -f1 || true)"
   [[ -z "${signal_line}" ]] && return 0
 
-  # Find the hit-count line after the signal
-  local hit_line
-  hit_line="$(tail -n "+${signal_line}" "${file}" | grep -n '命中次数' | head -1 | cut -d: -f1 || true)"
-  [[ -z "${hit_line}" ]] && return 0
+  # Find next rule heading after signal_line
+  local next_heading_line
+  next_heading_line="$(tail -n "+$((signal_line + 1))" "${file}" | grep -n '^### \[' | head -1 | cut -d: -f1 || true)"
 
+  local search_end
+  if [[ -n "${next_heading_line}" ]]; then
+    # next_heading_line is relative to (signal_line + 1), convert to absolute line count from signal_line
+    search_end=$(( signal_line + next_heading_line ))
+  else
+    # No next heading found — search to end of file
+    search_end=9999999
+  fi
+
+  # Only search within this rule's section
+  local hit_line
+  hit_line="$(sed -n "${signal_line},${search_end}p" "${file}" | grep -n '命中次数' | head -1 | cut -d: -f1 || true)"
+  if [[ -z "${hit_line}" ]]; then
+    return 0  # No hit count line found in this rule's section
+  fi
   local abs_line=$(( signal_line + hit_line - 1 ))
 
   # Read current count
@@ -273,6 +287,9 @@ main() {
   local next_id
   next_id="$(next_candidate_id)"
 
+  # NOTE: We load signals into an array and iterate with a for-loop intentionally.
+  # Using `echo "$signals" | while read` would process in a subshell, silently
+  # discarding all counter increments (count_new_candidates, count_upgraded, next_id).
   local i
   for (( i=0; i<${#signals[@]}; i++ )); do
     local line="${signals[$i]}"
