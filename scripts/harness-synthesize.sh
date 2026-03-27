@@ -182,6 +182,7 @@ count_candidate_rules() {
 # ---------------------------------------------------------------------------
 
 entropy_check_daemon_tests() {
+  local drift_file="$1"
   local claude_file="${PROJECT_ROOT}/packages/tw-daemon/CLAUDE.md"
   [[ -f "${claude_file}" ]] || return 0
 
@@ -206,7 +207,7 @@ entropy_check_daemon_tests() {
 
   if [[ "${declared}" != "${actual}" ]]; then
     printf '  ⚠️  tw-daemon/CLAUDE.md: 声明 %s 个测试，实际 %s 个\n' "${declared}" "${actual}"
-    count_entropy_drift=$(( count_entropy_drift + 1 ))
+    printf 'drift\n' >> "${drift_file}"
   fi
 }
 
@@ -215,6 +216,7 @@ entropy_check_daemon_tests() {
 # ---------------------------------------------------------------------------
 
 entropy_check_examples() {
+  local drift_file="$1"
   local claude_file="${PROJECT_ROOT}/examples/CLAUDE.md"
   [[ -f "${claude_file}" ]] || return 0
 
@@ -231,7 +233,7 @@ entropy_check_examples() {
 
   if [[ "${declared}" != "${actual}" ]]; then
     printf '  ⚠️  examples/CLAUDE.md: 声明 %s 个示例，实际 %s 个\n' "${declared}" "${actual}"
-    count_entropy_drift=$(( count_entropy_drift + 1 ))
+    printf 'drift\n' >> "${drift_file}"
   fi
 }
 
@@ -317,13 +319,12 @@ ${dedup_key}"
   done
 
   # ---- Step 3: Entropy checks ----
-  local entropy_output=""
-  entropy_output="$(entropy_check_daemon_tests 2>&1 || true)"
-  [[ -n "${entropy_output}" ]] && printf '%s\n' "${entropy_output}"
-
-  local entropy_output2=""
-  entropy_output2="$(entropy_check_examples 2>&1 || true)"
-  [[ -n "${entropy_output2}" ]] && printf '%s\n' "${entropy_output2}"
+  local DRIFT_FILE
+  DRIFT_FILE="$(mktemp)"
+  entropy_check_daemon_tests "${DRIFT_FILE}"
+  entropy_check_examples "${DRIFT_FILE}"
+  count_entropy_drift="$(wc -l < "${DRIFT_FILE}" | tr -d ' ')"
+  rm -f "${DRIFT_FILE}"
 
   # ---- Step 4: Summary ----
   local confirmed_count candidate_count
