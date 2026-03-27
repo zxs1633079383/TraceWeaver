@@ -145,11 +145,14 @@ truncate_str() {
 
 escape_json() {
   local str="$1"
-  # Escape backslashes first, then double quotes, then newlines/tabs
+  # Strip non-printable control chars (U+0000-U+001F) except \n \r \t
+  str="$(printf '%s' "${str}" | tr -d '\000-\010\013\014\016-\037')"
+  # Escape backslashes first, then double quotes
   str="${str//\\/\\\\}"
   str="${str//\"/\\\"}"
+  # Normalize line endings and tabs
   str="${str//$'\n'/\\n}"
-  str="${str//$'\r'/}"
+  str="${str//$'\r'/\\r}"
   str="${str//$'\t'/\\t}"
   printf '%s' "${str}"
 }
