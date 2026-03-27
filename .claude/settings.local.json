@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Bash|Edit|Write",
+        "command": "bash scripts/harness-collect.sh"
+      }
+    ],
+    "Stop": [
+      {
+        "command": "bash scripts/harness-synthesize.sh"
+      }
+    ]
+  }
+}
