@@ -30,3 +30,4 @@ package-lock.json
 !README.zh-CN.md
 !QUICKSTART.md
 !QUICKSTART.zh-CN.md
+!docs/harness/**/*.md
