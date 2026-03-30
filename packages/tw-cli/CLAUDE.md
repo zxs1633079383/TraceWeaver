@@ -42,9 +42,12 @@ tw <noun> [<subcommand>] [args] [options]
 noun:       daemon | status | register | update | events | dag
             impact | log | metrics | harness | watch | inbox
             taskmaster | diagnose | sync | trace | report
+            hook | usecase
 subcommand: daemon start|stop|restart  /  log query  /  harness list|show|run
             taskmaster hook|sync  /  diagnose  /  sync
             trace spans|info  /  report daily|list|show
+            hook session-start|pre-tool|post-tool|stop|rebind
+            usecase mutate|replace
 ```
 
 新增命令必须：
@@ -137,6 +140,9 @@ tw daemon stop
 | `trace_info` | `{ trace_id?, entity_id? }` | 完整链路详情（含 `_ai_context`，AI Agent 可消费）|
 | `report_generate` | `{ trace_id?, all? }` | 生成日报，返回文件路径列表 |
 | `report_list` | `{ date? }` | 列出已生成报告的元数据（YYYY-MM-DD 过滤）|
+| `usecase_mutate` | `{id, mutation_type, context?, entities?}` | UseCase insert/update |
+| `usecase_replace` | `{id, supersede, new_entities?}` | 批量 supersede + 新建 |
+| `session_rebind` | `{old_entity_id, new_entity_id}` | 匿名会话 → 正式实体 |
 
 ## 沉淀规则
 

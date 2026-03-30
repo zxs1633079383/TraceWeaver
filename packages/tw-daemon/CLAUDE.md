@@ -196,6 +196,7 @@ await exporterRegistry.shutdown()    // ← 最后：flush OtlpGrpcExporter → 
 | `notify/` | NotifyEngine + InboxAdapter | 不能直接读磁盘实体 |
 | `mcp/` | MCP Server（AI Agent 接口） | 只读 daemon 状态，不改实体 |
 | `report/` | ReportGenerator（日报生成）+ ReportScheduler（cron）| 不能 import trigger/ 或 harness/ |
+| `subscribers/` | ErrorBubbler / ProgressTracker / UsecaseMutationHandler | 不直接改磁盘实体，只通过 CommandHandler |
 
 ## 沉淀规则
 
