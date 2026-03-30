@@ -350,6 +350,113 @@ export class CommandHandler {
     return { ok: true }
   }
 
+  async usecaseMutate(params: {
+    id: string
+    mutation_type: 'insert' | 'update'
+    context?: string
+    entities?: RegisterParams[]
+  }): Promise<{ ok: boolean; data?: { registered_count?: number }; error?: { code: string; message: string } }> {
+    const entity = this.registry.get(params.id)
+    if (!entity) {
+      return { ok: false, error: { code: 'ENTITY_NOT_FOUND', message: `Entity ${params.id} not found` } }
+    }
+
+    if (params.mutation_type === 'insert' && params.entities?.length) {
+      let count = 0
+      for (const e of params.entities) {
+        await this.register(e)
+        count++
+      }
+      return { ok: true, data: { registered_count: count } }
+    }
+
+    if (params.mutation_type === 'update') {
+      await this.updateAttributes({
+        id: params.id,
+        attributes: {
+          mutation_context: params.context,
+          mutation_ts: new Date().toISOString(),
+          mutation_type: 'update',
+        },
+      })
+
+      this.emit({
+        id: randomUUID(),
+        type: 'usecase.mutated',
+        entity_id: params.id,
+        entity_type: entity.entity_type,
+        ts: new Date().toISOString(),
+        attributes: { mutation_type: 'update', context: params.context },
+      })
+
+      return { ok: true, data: {} }
+    }
+
+    return { ok: true, data: {} }
+  }
+
+  async usecaseReplace(params: {
+    id: string
+    supersede: string[]
+    new_entities?: RegisterParams[]
+  }): Promise<{ ok: boolean; data?: { superseded_count: number; registered_count: number }; error?: { code: string; message: string } }> {
+    const entity = this.registry.get(params.id)
+    if (!entity) {
+      return { ok: false, error: { code: 'ENTITY_NOT_FOUND', message: `Entity ${params.id} not found` } }
+    }
+
+    let supersededCount = 0
+    for (const targetId of params.supersede) {
+      const target = this.registry.get(targetId)
+      if (!target) continue
+      await this.updateState({ id: targetId, state: 'superseded', reason: 'replaced_by_new_chain' })
+      supersededCount++
+    }
+
+    let registeredCount = 0
+    if (params.new_entities?.length) {
+      for (const e of params.new_entities) {
+        await this.register(e)
+        registeredCount++
+      }
+    }
+
+    return { ok: true, data: { superseded_count: supersededCount, registered_count: registeredCount } }
+  }
+
+  async sessionRebind(params: {
+    old_entity_id: string
+    new_entity_id: string
+  }): Promise<{ ok: boolean; error?: { code: string; message: string } }> {
+    const oldEntity = this.registry.get(params.old_entity_id)
+    const newEntity = this.registry.get(params.new_entity_id)
+    if (!oldEntity) return { ok: false, error: { code: 'ENTITY_NOT_FOUND', message: `Old entity ${params.old_entity_id} not found` } }
+    if (!newEntity) return { ok: false, error: { code: 'ENTITY_NOT_FOUND', message: `New entity ${params.new_entity_id} not found` } }
+
+    this.opts.spanManager?.rebindEvents(params.old_entity_id, params.new_entity_id)
+
+    this.emit({
+      id: randomUUID(),
+      type: 'session.rebound',
+      entity_id: params.new_entity_id,
+      ts: new Date().toISOString(),
+      attributes: { old_entity_id: params.old_entity_id },
+    })
+
+    // Supersede the anonymous session entity
+    if (oldEntity.state !== 'completed' && oldEntity.state !== 'rejected' && oldEntity.state !== 'superseded') {
+      if (oldEntity.state === 'pending') {
+        await this.updateState({ id: params.old_entity_id, state: 'superseded', reason: 'session_rebound' })
+      } else {
+        // in_progress → paused → superseded
+        await this.updateState({ id: params.old_entity_id, state: 'paused', reason: 'session_rebound' })
+        await this.updateState({ id: params.old_entity_id, state: 'superseded', reason: 'session_rebound' })
+      }
+    }
+
+    return { ok: true }
+  }
+
   getAllEntities(): Entity[] {
     return this.registry.getAll()
   }

@@ -177,3 +177,178 @@ describe('remediationDone', () => {
     expect(done).toContain('rem-002.json')
   })
 })
+
+describe('usecaseMutate', () => {
+  it('insert: registers multiple entities under usecase', async () => {
+    await handler.register({ id: 'uc-1', entity_type: 'usecase' })
+
+    const result = await handler.usecaseMutate({
+      id: 'uc-1',
+      mutation_type: 'insert',
+      entities: [
+        { id: 'plan-a', entity_type: 'plan', parent_id: 'uc-1' },
+        { id: 'plan-b', entity_type: 'plan', parent_id: 'uc-1' },
+      ],
+    })
+
+    expect(result.ok).toBe(true)
+    expect(result.data?.registered_count).toBe(2)
+    expect(handler.getEntityById('plan-a')).toBeDefined()
+    expect(handler.getEntityById('plan-b')).toBeDefined()
+  })
+
+  it('update: emits usecase.mutated event and stores mutation_context', async () => {
+    const { EventBus } = await import('./event-bus/event-bus.js')
+    const eventBus = new EventBus()
+    eventBus.start()
+    const localTmpDir = await (await import('node:fs/promises')).mkdtemp(
+      join((await import('node:os')).tmpdir(), 'tw-cmd-mutate-')
+    )
+    const { CommandHandler: CH } = await import('./command-handler.js')
+    const h = new CH({ storeDir: localTmpDir, eventBus })
+    await h.init()
+
+    await h.register({ id: 'uc-1', entity_type: 'usecase' })
+
+    const captured: any[] = []
+    eventBus.subscribe(ev => captured.push(ev))
+
+    const result = await h.usecaseMutate({
+      id: 'uc-1',
+      mutation_type: 'update',
+      context: 'added new requirements',
+    })
+
+    expect(result.ok).toBe(true)
+
+    const entity = h.getEntityById('uc-1')
+    expect(entity?.attributes?.mutation_context).toBe('added new requirements')
+    expect(entity?.attributes?.mutation_type).toBe('update')
+
+    // Wait for EventBus drain window (50ms default)
+    await new Promise(resolve => setTimeout(resolve, 100))
+
+    const mutatedEvent = captured.find(ev => ev.type === 'usecase.mutated')
+    expect(mutatedEvent).toBeDefined()
+    expect(mutatedEvent.entity_id).toBe('uc-1')
+    expect(mutatedEvent.attributes?.context).toBe('added new requirements')
+
+    eventBus.stop()
+    await (await import('node:fs/promises')).rm(localTmpDir, { recursive: true })
+  })
+
+  it('fails for non-existent usecase', async () => {
+    const result = await handler.usecaseMutate({
+      id: 'nonexistent',
+      mutation_type: 'insert',
+    })
+    expect(result.ok).toBe(false)
+    expect(result.error?.code).toBe('ENTITY_NOT_FOUND')
+  })
+})
+
+describe('usecaseReplace', () => {
+  it('supersedes listed entities and registers new ones', async () => {
+    await handler.register({ id: 'uc-1', entity_type: 'usecase' })
+    await handler.register({ id: 'plan-1', entity_type: 'plan', parent_id: 'uc-1' })
+    await handler.register({ id: 'task-1', entity_type: 'task', parent_id: 'plan-1' })
+
+    // Transition task-1 to paused so it can be superseded
+    await handler.updateState({ id: 'task-1', state: 'in_progress' })
+    await handler.updateState({ id: 'task-1', state: 'paused' })
+
+    const result = await handler.usecaseReplace({
+      id: 'uc-1',
+      supersede: ['task-1'],
+      new_entities: [
+        { id: 'task-2', entity_type: 'task', parent_id: 'plan-1' },
+      ],
+    })
+
+    expect(result.ok).toBe(true)
+    expect(result.data?.superseded_count).toBe(1)
+    expect(result.data?.registered_count).toBe(1)
+
+    const supersededTask = handler.getEntityById('task-1')
+    expect(supersededTask?.state).toBe('superseded')
+
+    expect(handler.getEntityById('task-2')).toBeDefined()
+  })
+
+  it('returns ENTITY_NOT_FOUND for non-existent base entity', async () => {
+    const result = await handler.usecaseReplace({
+      id: 'nonexistent',
+      supersede: [],
+    })
+    expect(result.ok).toBe(false)
+    expect(result.error?.code).toBe('ENTITY_NOT_FOUND')
+  })
+})
+
+describe('sessionRebind', () => {
+  it('migrates events from old entity to new entity and supersedes old', async () => {
+    const { EventBus } = await import('./event-bus/event-bus.js')
+    const { SpanManager } = await import('../otel/span-manager.js')
+    const eventBus = new EventBus()
+    eventBus.start()
+    const spanManager = new SpanManager()
+    const localTmpDir = await (await import('node:fs/promises')).mkdtemp(
+      join((await import('node:os')).tmpdir(), 'tw-cmd-rebind-')
+    )
+    const { CommandHandler: CH } = await import('./command-handler.js')
+    const h = new CH({ storeDir: localTmpDir, eventBus, spanManager })
+    await h.init()
+
+    await h.register({ id: 'session-abc', entity_type: 'usecase' })
+    await h.register({ id: 'task-real', entity_type: 'task' })
+
+    // Add an event to the session-abc span
+    spanManager.addEvent('session-abc', 'user_action', { detail: 'clicked' })
+
+    const captured: any[] = []
+    eventBus.subscribe(ev => captured.push(ev))
+
+    const result = await h.sessionRebind({
+      old_entity_id: 'session-abc',
+      new_entity_id: 'task-real',
+    })
+
+    expect(result.ok).toBe(true)
+
+    // Old entity should be superseded
+    const oldEntity = h.getEntityById('session-abc')
+    expect(oldEntity?.state).toBe('superseded')
+
+    // Wait for EventBus drain window (50ms default)
+    await new Promise(resolve => setTimeout(resolve, 100))
+
+    // session.rebound event should be emitted
+    const reboundEvent = captured.find(ev => ev.type === 'session.rebound')
+    expect(reboundEvent).toBeDefined()
+    expect(reboundEvent.entity_id).toBe('task-real')
+    expect(reboundEvent.attributes?.old_entity_id).toBe('session-abc')
+
+    eventBus.stop()
+    await (await import('node:fs/promises')).rm(localTmpDir, { recursive: true })
+  })
+
+  it('returns ENTITY_NOT_FOUND when old entity does not exist', async () => {
+    await handler.register({ id: 'task-real', entity_type: 'task' })
+    const result = await handler.sessionRebind({
+      old_entity_id: 'nonexistent',
+      new_entity_id: 'task-real',
+    })
+    expect(result.ok).toBe(false)
+    expect(result.error?.code).toBe('ENTITY_NOT_FOUND')
+  })
+
+  it('returns ENTITY_NOT_FOUND when new entity does not exist', async () => {
+    await handler.register({ id: 'session-abc', entity_type: 'usecase' })
+    const result = await handler.sessionRebind({
+      old_entity_id: 'session-abc',
+      new_entity_id: 'nonexistent',
+    })
+    expect(result.ok).toBe(false)
+    expect(result.error?.code).toBe('ENTITY_NOT_FOUND')
+  })
+})
