@@ -268,6 +268,18 @@ export class CommandHandler {
       ts: new Date().toISOString(),
       attributes: { event: params.event, ...params.attributes },
     })
+    // Also emit the original event type so subscribers (ErrorBubbler, etc.) can react
+    if (params.event === 'error.captured') {
+      const entity = this.registry.get(params.entity_id)
+      this.emit({
+        id: randomUUID(),
+        type: 'error.captured' as any,
+        entity_id: params.entity_id,
+        entity_type: entity?.entity_type,
+        ts: new Date().toISOString(),
+        attributes: params.attributes ?? {},
+      })
+    }
     return { ok: true, data: { event_id: randomUUID(), timestamp: new Date().toISOString() } }
   }
 
