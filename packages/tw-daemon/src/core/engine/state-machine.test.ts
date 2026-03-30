@@ -57,3 +57,41 @@ describe('assertTransition', () => {
     }
   })
 })
+
+describe('paused state transitions', () => {
+  it('allows in_progress → paused', () => {
+    expect(canTransition('in_progress', 'paused')).toBe(true)
+  })
+
+  it('allows review → paused', () => {
+    expect(canTransition('review', 'paused')).toBe(true)
+  })
+
+  it('allows paused → in_progress (resume)', () => {
+    expect(canTransition('paused', 'in_progress')).toBe(true)
+  })
+
+  it('allows paused → superseded (replace)', () => {
+    expect(canTransition('paused', 'superseded')).toBe(true)
+  })
+
+  it('allows paused → rejected', () => {
+    expect(canTransition('paused', 'rejected')).toBe(true)
+  })
+
+  it('rejects paused → completed', () => {
+    expect(canTransition('paused', 'completed')).toBe(false)
+  })
+})
+
+describe('superseded state transitions', () => {
+  it('allows pending → superseded', () => {
+    expect(canTransition('pending', 'superseded')).toBe(true)
+  })
+
+  it('rejects superseded → any (terminal)', () => {
+    expect(canTransition('superseded', 'pending')).toBe(false)
+    expect(canTransition('superseded', 'in_progress')).toBe(false)
+    expect(canTransition('superseded', 'paused')).toBe(false)
+  })
+})
