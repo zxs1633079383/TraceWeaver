@@ -162,6 +162,27 @@ export class IpcServer {
         const { date } = params as { date?: string }
         const reports = await this.reportGenerator.listReports(date)
         data = { reports }
+      } else if (method === 'usecase_mutate') {
+        if (typeof (params as any).id !== 'string') {
+          throw Object.assign(new Error('Missing required param: id'), { code: 'INVALID_PARAMS' })
+        }
+        const result = await this.handler.usecaseMutate(params as any)
+        if (!result.ok) throw Object.assign(new Error(result.error!.message), { code: result.error!.code })
+        data = result.data
+      } else if (method === 'usecase_replace') {
+        if (typeof (params as any).id !== 'string') {
+          throw Object.assign(new Error('Missing required param: id'), { code: 'INVALID_PARAMS' })
+        }
+        const result = await this.handler.usecaseReplace(params as any)
+        if (!result.ok) throw Object.assign(new Error(result.error!.message), { code: result.error!.code })
+        data = result.data
+      } else if (method === 'session_rebind') {
+        if (typeof (params as any).old_entity_id !== 'string' || typeof (params as any).new_entity_id !== 'string') {
+          throw Object.assign(new Error('Missing required params: old_entity_id, new_entity_id'), { code: 'INVALID_PARAMS' })
+        }
+        const result = await this.handler.sessionRebind(params as any)
+        if (!result.ok) throw Object.assign(new Error(result.error!.message), { code: result.error!.code })
+        data = { rebound: true }
       } else {
         throw Object.assign(new Error(`Unknown method: ${method}`), { code: 'UNKNOWN_METHOD' })
       }
