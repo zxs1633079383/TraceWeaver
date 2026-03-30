@@ -155,7 +155,7 @@ export class CommandHandler {
       reason: params.reason,
     })
     // End span on terminal states
-    if (params.state === 'completed' || params.state === 'rejected') {
+    if (params.state === 'completed' || params.state === 'rejected' || params.state === 'superseded') {
       const status = SpanManager.stateToStatus(params.state)
       this.opts.spanManager?.endSpan(params.id, status)
     }
