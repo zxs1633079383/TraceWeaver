@@ -1202,6 +1202,291 @@ git commit -m "chore(daemon): remove old compiled constraint evaluator, rebuild 
 
 ---
 
+### Task 8: E2E Demo — full flow with CLI + Jaeger verification
+
+**Files:**
+- Create: `examples/src/15-constraint-harness-e2e.ts`
+
+This task validates the entire feature end-to-end, following the real-project-integration-guide.md pattern. It registers entities, runs constraint evaluation, and verifies results through CLI and Jaeger.
+
+- [ ] **Step 1: Start Jaeger (if not running)**
+
+```bash
+docker run -d --name jaeger \
+  -p 4317:4317 -p 16686:16686 \
+  jaegertracing/all-in-one:latest 2>/dev/null || echo "Jaeger already running"
+
+# Verify
+nc -z localhost 4317 && echo "Jaeger OK"
+```
+
+- [ ] **Step 2: Create the E2E example script**
+
+```typescript
+// examples/src/15-constraint-harness-e2e.ts
+import { CommandHandler } from '@traceweaver/daemon';
+import { EventBus } from '@traceweaver/daemon/core/event-bus/event-bus';
+import { SpanManager } from '@traceweaver/daemon/otel/span-manager';
+import { ExporterRegistry } from '@traceweaver/daemon/otel/exporter-registry';
+import { ConstraintEvaluator } from '@traceweaver/daemon/constraint/evaluator';
+import { ConstraintHarness } from '@traceweaver/daemon/constraint/harness';
+import type { TwEvent } from '@traceweaver/types';
+import { mkdtemp, rm, writeFile, mkdir } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
+async function main() {
+  console.log('=== Example 15: Constraint Harness E2E ===\n');
+
+  // Setup temp store
+  const storeDir = await mkdtemp(join(tmpdir(), 'tw-e2e-constraint-'));
+  const projectDir = await mkdtemp(join(tmpdir(), 'tw-project-'));
+
+  // Create constraint files in project
+  await mkdir(join(projectDir, 'docs', 'harness'), { recursive: true });
+  await writeFile(
+    join(projectDir, 'docs', 'harness', 'constraints.md'),
+    `# Constraints\n- All functions must be under 50 lines\n- No deep nesting (>4 levels)\n- All errors must be handled explicitly\n`
+  );
+
+  // Create artifact file
+  await mkdir(join(projectDir, 'src'), { recursive: true });
+  await writeFile(
+    join(projectDir, 'src', 'app.ts'),
+    `export function hello() {\n  return 'world';\n}\n`
+  );
+
+  // Init modules
+  const eventBus = new EventBus();
+  eventBus.start();
+
+  const exporterRegistry = new ExporterRegistry({
+    exporters: ['console'],  // Change to 'otlp-grpc' for Jaeger
+  });
+  const spanManager = new SpanManager({ exporterRegistry });
+
+  const handler = new CommandHandler({
+    storeDir,
+    eventBus,
+    spanManager,
+  });
+  await handler.init();
+
+  // Collect events
+  const events: TwEvent[] = [];
+  eventBus.subscribe(ev => events.push(ev));
+
+  // --- Phase 1: Register entities ---
+  console.log('Phase 1: Registering entities...');
+
+  await handler.register({ id: 'uc-demo', entity_type: 'usecase' });
+  await handler.register({ id: 'plan-feature', entity_type: 'plan', parent_id: 'uc-demo' });
+  await handler.register({
+    id: 'task-impl',
+    entity_type: 'task',
+    parent_id: 'plan-feature',
+    constraint_refs: ['docs/harness/constraints.md'],
+    artifact_refs: [{ type: 'code', path: 'src/app.ts' }],
+  });
+
+  await handler.updateState({ id: 'uc-demo', state: 'in_progress' });
+  await handler.updateState({ id: 'plan-feature', state: 'in_progress' });
+  await handler.updateState({ id: 'task-impl', state: 'in_progress' });
+
+  console.log('  ✓ Registered: uc-demo → plan-feature → task-impl\n');
+
+  // --- Phase 2: Run constraint evaluation ---
+  console.log('Phase 2: Running constraint evaluation...');
+
+  const evaluator = new ConstraintEvaluator({
+    enabled: true,
+    projectRoot: projectDir,
+    // Use mock LLM for demo (replace with claude --print for production)
+    llmFn: async (prompt: string) => {
+      console.log(`  [LLM] Evaluating constraint (${prompt.length} chars)...`);
+      // Simulate a pass result
+      return 'RESULT: pass\nAll functions are under 50 lines. No deep nesting found. Error handling is explicit.';
+    },
+  });
+
+  const harness = new ConstraintHarness({
+    evaluator,
+    spanManager,
+    eventBus,
+    timeoutMs: 30_000,
+  });
+
+  const entity = handler.getEntity('task-impl');
+  const result = await harness.run(entity!);
+
+  console.log(`\n  Result: ${result.result}`);
+  console.log(`  Duration: ${result.duration_ms}ms`);
+  console.log(`  Span ID: ${result.span_id}`);
+  console.log(`  Refs checked: ${result.refs_checked.length}`);
+  for (const ref of result.refs_checked) {
+    console.log(`    ${ref.result === 'pass' ? '✓' : '✗'} ${ref.ref}: ${ref.note}`);
+  }
+  console.log();
+
+  // --- Phase 3: Complete the task ---
+  console.log('Phase 3: Completing task...');
+
+  await handler.updateState({ id: 'task-impl', state: 'review' });
+  await handler.updateState({ id: 'task-impl', state: 'completed' });
+  await handler.updateState({ id: 'plan-feature', state: 'review' });
+  await handler.updateState({ id: 'plan-feature', state: 'completed' });
+  await handler.updateState({ id: 'uc-demo', state: 'review' });
+  await handler.updateState({ id: 'uc-demo', state: 'completed' });
+
+  console.log('  ✓ All entities completed\n');
+
+  // --- Phase 4: Verify via queries ---
+  console.log('Phase 4: Verifying results...');
+
+  // Wait for EventBus drain
+  await new Promise(r => setTimeout(r, 200));
+
+  // Check constraint event was published
+  const constraintEvents = events.filter(e => e.type === 'constraint.evaluated');
+  console.log(`  Constraint events: ${constraintEvents.length}`);
+  if (constraintEvents.length > 0) {
+    const ce = constraintEvents[0];
+    console.log(`    entity_id: ${ce.entity_id}`);
+    console.log(`    result: ${ce.attributes.result}`);
+    console.log(`    span_id: ${ce.attributes.span_id}`);
+  }
+
+  // Check spans
+  const allSpans = spanManager.getAllSpans();
+  console.log(`  Total spans: ${allSpans.length}`);
+  for (const span of allSpans) {
+    const status = span.status ?? 'UNSET';
+    console.log(`    ${span.entity_id} [${status}] trace=${span.trace_id.slice(0, 8)}...`);
+  }
+
+  // Check progress
+  const status = await handler.getStatus('uc-demo');
+  console.log(`  UC progress: ${JSON.stringify((status as any).progress)}`);
+
+  console.log('\n=== E2E Complete ===');
+  console.log('\nTo view in Jaeger:');
+  console.log('  1. Restart with exporter: otlp-grpc');
+  console.log('  2. Open http://localhost:16686');
+  console.log('  3. Service: traceweaver-daemon');
+  console.log('  4. Look for trace: uc-demo → plan-feature → task-impl + constraint:task-impl');
+
+  // Cleanup
+  eventBus.stop();
+  await rm(storeDir, { recursive: true });
+  await rm(projectDir, { recursive: true });
+}
+
+main().catch(err => {
+  console.error('E2E failed:', err);
+  process.exit(1);
+});
+```
+
+- [ ] **Step 3: Add run script to root package.json**
+
+Add to the `scripts` section of the root `package.json`:
+
+```json
+"example:15": "tsx examples/src/15-constraint-harness-e2e.ts"
+```
+
+- [ ] **Step 4: Run the E2E example**
+
+Run: `cd /Users/mac28/workspace/frontend/TraceWeaver && npm run example:15`
+
+Expected output:
+```
+=== Example 15: Constraint Harness E2E ===
+
+Phase 1: Registering entities...
+  ✓ Registered: uc-demo → plan-feature → task-impl
+
+Phase 2: Running constraint evaluation...
+  [LLM] Evaluating constraint (XXX chars)...
+
+  Result: pass
+  Duration: Xms
+  Span ID: span-xxx
+  Refs checked: 1
+    ✓ docs/harness/constraints.md: All functions are under 50 lines...
+
+Phase 3: Completing task...
+  ✓ All entities completed
+
+Phase 4: Verifying results...
+  Constraint events: 1
+    entity_id: task-impl
+    result: pass
+    span_id: span-xxx
+  Total spans: 4
+    uc-demo [OK] trace=xxx...
+    plan-feature [OK] trace=xxx...
+    task-impl [OK] trace=xxx...
+    constraint:task-impl [OK] trace=xxx...
+  UC progress: {"done":1,"total":1,"percent":100}
+
+=== E2E Complete ===
+```
+
+- [ ] **Step 5: Verify via CLI (daemon must be running)**
+
+```bash
+# Start daemon
+TW_STORE=/tmp/tw-e2e-cli tw daemon start
+
+# Register + evaluate via CLI
+tw register task task-cli-test --constraint-refs docs/constraints.md
+tw update task-cli-test --state in_progress
+tw constraint evaluate task-cli-test --json
+
+# Check history
+tw constraint history task-cli-test --json
+
+# Check trace
+tw trace info --entity-id task-cli-test --json
+
+# Stop daemon
+tw daemon stop
+```
+
+- [ ] **Step 6: Verify via Jaeger (if otlp-grpc configured)**
+
+```bash
+# Ensure Jaeger is running
+docker ps | grep jaeger
+
+# Open browser
+open http://localhost:16686
+
+# In Jaeger UI:
+# 1. Service → traceweaver-daemon
+# 2. Find trace with "uc-demo" operation
+# 3. Verify span tree:
+#    uc-demo
+#    └── plan-feature
+#        └── task-impl
+#            └── constraint:task-impl  ← NEW: constraint evaluation span
+# 4. Click constraint:task-impl span
+# 5. Verify attributes:
+#    constraint.result = pass
+#    constraint.duration_ms = X
+#    constraint.refs_count = 1
+```
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add examples/src/15-constraint-harness-e2e.ts package.json
+git commit -m "feat(examples): add constraint harness E2E demo (example 15)"
+```
+
+---
+
 ## Summary
 
 | Task | What | Files | Tests |
@@ -1213,3 +1498,4 @@ git commit -m "chore(daemon): remove old compiled constraint evaluator, rebuild 
 | 5 | Create CLI command | commands/constraint.ts | typecheck |
 | 6 | Integration test | constraint/integration.test.ts | 2 integration tests |
 | 7 | Cleanup old dist | dist/constraint/* | full suite |
+| 8 | E2E Demo + Jaeger | examples/15-*.ts + CLI + Jaeger | manual verification |
