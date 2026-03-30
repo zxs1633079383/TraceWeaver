@@ -16,7 +16,7 @@
  *   JAEGER_ENDPOINT=localhost:4317 npm run example:16
  */
 
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdtemp, rm, readFile, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -64,30 +64,20 @@ function warn(msg: string): void { console.log(`  ${C.yellow}⚠${C.reset} ${msg
 
 const wait = (ms: number) => new Promise(r => setTimeout(r, ms))
 
-// ── Constraint Rule Content ─────────────────────────────────────────────────
-const CODING_RULES_CONTENT = `# Coding Rules
-- All functions must be under 50 lines
-- All endpoints must validate input
-- Error responses must use standard format
-- No hardcoded values (use constants)
-- All public APIs must have tests`
-
-const CONSTRAINT_CONTENTS: Record<string, string> = {
-  'coding-rules.md': CODING_RULES_CONTENT,
-}
-
 // ── Main ────────────────────────────────────────────────────────────────────
 async function main(): Promise<void> {
   console.log(`\n${C.bold}${C.magenta}TraceWeaver — Example 16: Todo API Constraint Demo${C.reset}`)
   console.log(`${C.gray}The most comprehensive demo: 3 UseCases, constraints, error bubbling,`)
   console.log(`progress tracking, usecase mutation (drain + replace), and Jaeger export.${C.reset}\n`)
 
-  const JAEGER_ENDPOINT = process.env.JAEGER_ENDPOINT ?? 'localhost:4317'
-  const PROJECT_ID      = `todo-api-demo-${new Date().toISOString().slice(0, 10)}`
-  const storeDir        = await mkdtemp(join(tmpdir(), 'tw-example-16-'))
+  const JAEGER_ENDPOINT    = process.env.JAEGER_ENDPOINT ?? 'localhost:4317'
+  const PROJECT_ID         = `todo-api-demo-${new Date().toISOString().slice(0, 10)}`
+  const TODO_PROJECT_ROOT  = process.env.TODO_PROJECT_ROOT ?? '/Users/mac28/workspace/temp/todo-api-demo'
+  const storeDir           = await mkdtemp(join(tmpdir(), 'tw-example-16-'))
 
   info(`Jaeger endpoint : ${JAEGER_ENDPOINT}`)
   info(`Project ID      : ${PROJECT_ID}`)
+  info(`Todo project    : ${TODO_PROJECT_ROOT}`)
   info(`Store dir       : ${storeDir}`)
 
   // Track constraint evaluations for summary
@@ -169,19 +159,38 @@ async function main(): Promise<void> {
   eventBus.subscribe(event => usecaseMutationHandler.handle(event))
   ok('UsecaseMutationHandler subscriber wired')
 
-  // Mock LLM function
-  const mockLlmFn = async (prompt: string): Promise<string> => {
-    // Extract entity_id from prompt
+  // Smart mock LLM: reads real files from todo-api-demo, checks constraints
+  const smartLlmFn = async (prompt: string): Promise<string> => {
     const taskMatch = prompt.match(/TASK:\s*(\S+)/)
     const taskId = taskMatch?.[1] ?? ''
 
-    if (taskId === 'task-schema-test' && !schemaTestFixed) {
-      return 'RESULT: fail\nTest file has no assertion for edge case: empty title string'
+    // For task-schema-test: read the REAL test file and check for edge case
+    if (taskId === 'task-schema-test') {
+      const testFilePath = join(TODO_PROJECT_ROOT, 'src/schemas/todo.test.ts')
+      try {
+        const testContent = await readFile(testFilePath, 'utf8')
+        info(`  [smart-llm] Reading real file: ${testFilePath} (${testContent.length} chars)`)
+
+        // Check if test file has empty string edge case assertion
+        const hasEmptyStringTest = testContent.includes("''") || testContent.includes('""')
+          || testContent.includes('empty string') && testContent.includes('expect')
+          && !testContent.includes('// BUG')
+
+        if (!hasEmptyStringTest) {
+          return 'RESULT: fail\nTest file src/schemas/todo.test.ts has no assertion for edge case: empty title string. coding-rules.md requires: "Edge cases required: empty string". Add: it(\'rejects empty title\', () => { expect(validateCreateTodo({ title: \'\' }).success).toBe(false) })'
+        }
+        return 'RESULT: pass\nAll edge cases covered including empty string validation.'
+      } catch {
+        return 'RESULT: skipped\nCould not read test file'
+      }
     }
+
+    // For other tasks: read constraint file and do basic check
+    info(`  [smart-llm] Evaluating ${taskId} against coding-rules.md`)
     return 'RESULT: pass\nAll coding standards satisfied.'
   }
 
-  const evaluator = new ConstraintEvaluator({ enabled: true, llmFn: mockLlmFn })
+  const evaluator = new ConstraintEvaluator({ enabled: true, llmFn: smartLlmFn, projectRoot: TODO_PROJECT_ROOT })
   const harness = new ConstraintHarness({ evaluator, spanManager, eventBus })
   ok('ConstraintEvaluator + ConstraintHarness created')
 
@@ -229,17 +238,17 @@ async function main(): Promise<void> {
 
   const taskCreate = await handler.register({ id: 'task-create-endpoint', entity_type: 'task', parent_id: 'plan-endpoints', depends_on: ['plan-endpoints'],
     attributes: { title: 'POST /todos' }, artifact_refs: [{ type: 'code', path: 'src/routes/create.ts' }] })
-  ;(taskCreate as any).constraint_refs = ['coding-rules.md']
+  ;(taskCreate as any).constraint_refs = ['docs/coding-rules.md']
 
   const taskRead = await handler.register({ id: 'task-read-endpoint', entity_type: 'task', parent_id: 'plan-endpoints', depends_on: ['plan-endpoints'],
     attributes: { title: 'GET /todos' }, artifact_refs: [{ type: 'code', path: 'src/routes/read.ts' }] })
-  ;(taskRead as any).constraint_refs = ['coding-rules.md']
+  ;(taskRead as any).constraint_refs = ['docs/coding-rules.md']
 
   const taskDelete = await handler.register({ id: 'task-delete-endpoint', entity_type: 'task', parent_id: 'plan-endpoints', depends_on: ['plan-endpoints'],
     attributes: { title: 'DELETE /todos/:id' }, artifact_refs: [{ type: 'code', path: 'src/routes/delete.ts' }] })
-  ;(taskDelete as any).constraint_refs = ['coding-rules.md']
+  ;(taskDelete as any).constraint_refs = ['docs/coding-rules.md']
 
-  ok('plan-endpoints: 3 tasks (all with constraint_refs: [coding-rules.md])')
+  ok('plan-endpoints: 3 tasks (all with constraint_refs: [docs/coding-rules.md])')
 
   // ── UC2: uc-validation ────────────────────────────────────────────────
   subsection('UC2: uc-validation (Input Validation)')
@@ -252,11 +261,11 @@ async function main(): Promise<void> {
 
   const taskZodSchema = await handler.register({ id: 'task-zod-schema', entity_type: 'task', parent_id: 'plan-schema', depends_on: ['plan-schema'],
     attributes: { title: 'Zod schema definitions' }, artifact_refs: [{ type: 'code', path: 'src/schemas/todo.ts' }] })
-  ;(taskZodSchema as any).constraint_refs = ['coding-rules.md']
+  ;(taskZodSchema as any).constraint_refs = ['docs/coding-rules.md']
 
   const taskSchemaTest = await handler.register({ id: 'task-schema-test', entity_type: 'task', parent_id: 'plan-schema', depends_on: ['plan-schema'],
     attributes: { title: 'Schema unit tests (will FAIL constraint)' }, artifact_refs: [{ type: 'test', path: 'src/schemas/todo.test.ts' }] })
-  ;(taskSchemaTest as any).constraint_refs = ['coding-rules.md']
+  ;(taskSchemaTest as any).constraint_refs = ['docs/coding-rules.md']
 
   ok('plan-schema: 2 tasks (task-schema-test will intentionally FAIL constraint)')
 
@@ -283,7 +292,7 @@ async function main(): Promise<void> {
 
   const taskSearchImpl = await handler.register({ id: 'task-search-impl', entity_type: 'task', parent_id: 'plan-search', depends_on: ['plan-search'],
     attributes: { title: 'Search implementation' }, artifact_refs: [{ type: 'code', path: 'src/search/engine.ts' }] })
-  ;(taskSearchImpl as any).constraint_refs = ['coding-rules.md']
+  ;(taskSearchImpl as any).constraint_refs = ['docs/coding-rules.md']
 
   await handler.register({ id: 'task-search-test', entity_type: 'task', parent_id: 'plan-search', depends_on: ['plan-search'], attributes: { title: 'Search tests' } })
   ok('plan-search: 2 tasks (will be superseded by mutation)')
@@ -320,7 +329,7 @@ async function main(): Promise<void> {
 
   // task-create-endpoint
   await handler.updateState({ id: 'task-create-endpoint', state: 'in_progress' })
-  const r1 = await harness.run(taskCreate, { constraintContents: CONSTRAINT_CONTENTS })
+  const r1 = await harness.run(taskCreate, {})
   if (r1.result === 'pass') { constraintPassCount++; ok(`task-create-endpoint constraint: PASS`) }
   else { constraintFailCount++; fail(`task-create-endpoint constraint: ${r1.result}`) }
   await advanceTask('task-create-endpoint', ['review', 'completed'])
@@ -328,7 +337,7 @@ async function main(): Promise<void> {
 
   // task-read-endpoint
   await handler.updateState({ id: 'task-read-endpoint', state: 'in_progress' })
-  const r2 = await harness.run(taskRead, { constraintContents: CONSTRAINT_CONTENTS })
+  const r2 = await harness.run(taskRead, {})
   if (r2.result === 'pass') { constraintPassCount++; ok(`task-read-endpoint constraint: PASS`) }
   else { constraintFailCount++; fail(`task-read-endpoint constraint: ${r2.result}`) }
   await advanceTask('task-read-endpoint', ['review', 'completed'])
@@ -336,7 +345,7 @@ async function main(): Promise<void> {
 
   // task-delete-endpoint
   await handler.updateState({ id: 'task-delete-endpoint', state: 'in_progress' })
-  const r3 = await harness.run(taskDelete, { constraintContents: CONSTRAINT_CONTENTS })
+  const r3 = await harness.run(taskDelete, {})
   if (r3.result === 'pass') { constraintPassCount++; ok(`task-delete-endpoint constraint: PASS`) }
   else { constraintFailCount++; fail(`task-delete-endpoint constraint: ${r3.result}`) }
   await advanceTask('task-delete-endpoint', ['review', 'completed'])
@@ -359,7 +368,7 @@ async function main(): Promise<void> {
 
   // task-zod-schema: normal pass
   await handler.updateState({ id: 'task-zod-schema', state: 'in_progress' })
-  const r4 = await harness.run(taskZodSchema, { constraintContents: CONSTRAINT_CONTENTS })
+  const r4 = await harness.run(taskZodSchema, {})
   if (r4.result === 'pass') { constraintPassCount++; ok(`task-zod-schema constraint: PASS`) }
   else { constraintFailCount++; fail(`task-zod-schema constraint: ${r4.result}`) }
   await advanceTask('task-zod-schema', ['review', 'completed'])
@@ -367,7 +376,7 @@ async function main(): Promise<void> {
 
   // task-schema-test: constraint FAIL
   await handler.updateState({ id: 'task-schema-test', state: 'in_progress' })
-  const r5 = await harness.run(taskSchemaTest, { constraintContents: CONSTRAINT_CONTENTS })
+  const r5 = await harness.run(taskSchemaTest, {})
   if (r5.result === 'fail') {
     constraintFailCount++
     fail(`task-schema-test constraint: FAIL — "${r5.refs_checked[0]?.note ?? 'unknown'}"`)
@@ -440,14 +449,24 @@ async function main(): Promise<void> {
     info(`  → Agent now knows exactly what to fix`)
   }
 
-  // Step 3: Agent fixes the code based on structured error info
-  subsection('Fix: task-schema-test — add missing assertion (based on trace info)')
-  schemaTestFixed = true
-  info('Agent reads constraint.ref.0.note: "no assertion for edge case: empty title string"')
-  info('Agent adds: expect(validate("")).toBe(false) to todo.test.ts')
+  // Step 3: Agent fixes the REAL code file based on structured error info
+  subsection('Fix: task-schema-test — Agent modifies real test file')
+  info('Agent reads constraint.ref.0.note → missing empty string edge case')
+  info(`Agent writes fix to: ${TODO_PROJECT_ROOT}/src/schemas/todo.test.ts`)
+
+  const testFilePath = join(TODO_PROJECT_ROOT, 'src/schemas/todo.test.ts')
+  const originalContent = await readFile(testFilePath, 'utf8')
+
+  // Agent adds the missing edge case test (replacing the BUG comment)
+  const fixedContent = originalContent.replace(
+    `  // BUG: missing edge case test for empty string title\n  // coding-rules.md requires: "Edge cases required: empty string"`,
+    `  it('rejects empty title string', () => {\n    const result = validateCreateTodo({ title: '' })\n    expect(result.success).toBe(false)\n  })`
+  )
+  await writeFile(testFilePath, fixedContent, 'utf8')
+  ok(`File written: src/schemas/todo.test.ts (${originalContent.length} → ${fixedContent.length} chars)`)
 
   // Step 4: Re-evaluate after fix
-  const r5fix = await harness.run(taskSchemaTest, { constraintContents: CONSTRAINT_CONTENTS })
+  const r5fix = await harness.run(taskSchemaTest, {})
   if (r5fix.result === 'pass') {
     constraintPassCount++
     ok(`task-schema-test constraint re-evaluation: PASS`)
@@ -716,6 +735,20 @@ ${C.bold}${C.green}  Demo Complete!${C.reset}
 `)
 
   await rm(storeDir, { recursive: true, force: true })
+
+  // Restore todo-api-demo test file to original state (with BUG comment)
+  const restoreTestPath = join(TODO_PROJECT_ROOT, 'src/schemas/todo.test.ts')
+  try {
+    const currentContent = await readFile(restoreTestPath, 'utf8')
+    if (currentContent.includes('rejects empty title string')) {
+      const restored = currentContent.replace(
+        `  it('rejects empty title string', () => {\n    const result = validateCreateTodo({ title: '' })\n    expect(result.success).toBe(false)\n  })`,
+        `  // BUG: missing edge case test for empty string title\n  // coding-rules.md requires: "Edge cases required: empty string"`
+      )
+      await writeFile(restoreTestPath, restored, 'utf8')
+      info('Restored todo-api-demo test file to original state (re-runnable)')
+    }
+  } catch { /* ignore */ }
 }
 
 main().catch(err => {
