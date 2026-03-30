@@ -32,7 +32,9 @@ export class ConstraintHarness {
     const checkedAt = new Date().toISOString();
 
     const constraintRefs: string[] =
-      (entity as any).constraint_refs ?? [];
+      (entity.attributes?.constraint_refs as string[] | undefined)
+      ?? (entity as any).constraint_refs
+      ?? [];
 
     if (constraintRefs.length === 0) {
       return {

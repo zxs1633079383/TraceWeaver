@@ -48,6 +48,8 @@ export interface NotifyConfig {
 }
 
 export interface WatchConfig {
+  /** Set to false to disable file watching entirely. */
+  enabled?: boolean
   /** Directories to watch for file changes (relative to project root). Default: ["."] */
   dirs?: string[]
   /** Additional glob patterns to ignore (appended to the built-in daemon-file exclusions). */
@@ -136,6 +138,8 @@ export function loadConfig(storeDir: string): TwConfig {
  *  3. The store directory is always excluded so daemon-internal files are never watched.
  */
 export function resolveWatchDirs(config: TwConfig, projectRoot: string, storeDir: string): string[] {
+  if (config.watch?.enabled === false) return []
+
   const dirs = config.watch?.dirs?.length
     ? config.watch.dirs.map(d => resolve(projectRoot, d))
     : [projectRoot]

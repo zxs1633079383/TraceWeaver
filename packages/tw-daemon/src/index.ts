@@ -62,9 +62,34 @@ async function main() {
   const spanManager = new SpanManager({ projectId: 'default', exporterRegistry })
   const spanMetrics = new SpanMetrics(spanManager)
 
+  // Smart mock LLM for demo mode: reads real files and checks constraints
+  const demoLlmFn = process.env.TW_CONSTRAINT_MOCK === 'smart'
+    ? async (prompt: string): Promise<string> => {
+        const taskMatch = prompt.match(/TASK:\s*(\S+)/)
+        const taskId = taskMatch?.[1] ?? ''
+        // For schema test: check if test file has empty string edge case
+        if (taskId.includes('schema-test') && process.env.TW_PROJECT_ROOT) {
+          try {
+            const { readFile } = await import('node:fs/promises')
+            const { join } = await import('node:path')
+            const testPath = join(process.env.TW_PROJECT_ROOT, 'src/schemas/todo.test.ts')
+            const content = await readFile(testPath, 'utf8')
+            const hasEdgeCase = content.includes("''") || (content.includes('empty') && !content.includes('// BUG'))
+            if (!hasEdgeCase) {
+              return 'RESULT: fail\nTest file src/schemas/todo.test.ts has no assertion for edge case: empty title string. coding-rules.md requires: "Edge cases required: empty string".'
+            }
+            return 'RESULT: pass\nAll edge cases covered including empty string validation.'
+          } catch { return 'RESULT: skipped\nCould not read test file' }
+        }
+        return 'RESULT: pass\nAll coding standards satisfied.'
+      }
+    : undefined
+
   const constraintEvaluator = new ConstraintEvaluator({
     enabled: true,
     model: 'claude-opus-4-6',
+    projectRoot: process.env.TW_PROJECT_ROOT,
+    llmFn: demoLlmFn,
   })
 
   const constraintHarness = new ConstraintHarness({
@@ -164,12 +189,15 @@ async function main() {
   })
   notifyEngine.start()
 
-  // Watch project files (NOT the store dir).
+  // Watch project files (NOT the store dir). Skip if no dirs configured.
   const watchDirs = resolveWatchDirs(config, PROJECT_ROOT, STORE_DIR)
-  const fsWatcher = new FsWatcher(watchDirs, eventBus, {
-    extraIgnored: config.watch?.ignored,
-  })
-  await fsWatcher.start()
+  let fsWatcher: FsWatcher | undefined
+  if (watchDirs.length > 0) {
+    fsWatcher = new FsWatcher(watchDirs, eventBus, {
+      extraIgnored: config.watch?.ignored,
+    })
+    await fsWatcher.start()
+  }
 
   // ── file.changed → ImpactResolver → artifact.modified ──────────────────
   eventBus.subscribe(event => {
@@ -260,7 +288,7 @@ async function main() {
     clearInterval(watchdog)
     reportScheduler?.stop()
     notifyEngine.stop()
-    await fsWatcher.stop()
+    await fsWatcher?.stop()
     eb.stop()
     await s.stop()
     await exporterRegistry.shutdown()
