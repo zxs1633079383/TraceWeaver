@@ -102,7 +102,13 @@ export class ConstraintHarness {
       };
     }
 
-    // 3. Update span
+    // 3. Ensure minimum 1ms duration to avoid Jaeger negative-duration warning
+    const elapsed = Date.now() - start;
+    if (elapsed < 1) {
+      const waitUntil = start + 1;
+      while (Date.now() < waitUntil) { /* spin */ }
+    }
+    evalResult = { ...evalResult, duration_ms: Math.max(Date.now() - start, 1) };
     if (spanId) {
       try {
         this.spanManager.updateAttributes(`constraint:${entity.id}`, {
