@@ -380,6 +380,11 @@ export class CommandHandler {
         },
       })
 
+      this.opts.spanManager?.addEvent(params.id, 'usecase.mutated', {
+        mutation_type: params.mutation_type,
+        context: params.context,
+      })
+
       this.emit({
         id: randomUUID(),
         type: 'usecase.mutated',
@@ -420,6 +425,11 @@ export class CommandHandler {
         registeredCount++
       }
     }
+
+    this.opts.spanManager?.addEvent(params.id, 'usecase.replaced', {
+      superseded_count: supersededCount,
+      new_count: registeredCount,
+    })
 
     return { ok: true, data: { superseded_count: supersededCount, registered_count: registeredCount } }
   }
