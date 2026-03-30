@@ -22,7 +22,21 @@ main() {
   project_root="$(cd "${script_dir}/.." && pwd)"
 
   local outfile="${project_root}/docs/harness/experience.ndjson"
+  local evolution_log="${project_root}/docs/harness/evolution-log.ndjson"
   mkdir -p "$(dirname "${outfile}")"
+
+  # ---- First-invocation: show next_focus from evolution-log ----
+  local focus_flag="/tmp/.tw-harness-focus-shown-${session_id:-$$}"
+  if [[ ! -f "${focus_flag}" && -f "${evolution_log}" && -s "${evolution_log}" ]]; then
+    touch "${focus_flag}"
+    local last_entry
+    last_entry="$(tail -1 "${evolution_log}")"
+    local next_focus
+    next_focus="$(extract_json_string_field "${last_entry}" "next_focus")"
+    if [[ -n "${next_focus}" && "${next_focus}" != "no specific focus"* ]]; then
+      printf '\n🎯 上轮演进建议: %s\n\n' "${next_focus}" >&2
+    fi
+  fi
 
   local signal_type=""
   local module=""
@@ -106,6 +120,27 @@ main() {
   printf '{"ts":"%s","session_id":"%s","type":"%s","module":"%s","signal":"%s","context":"%s","resolution":"%s"}\n' \
     "${ts}" "${session_id}" "${signal_type}" "${module}" "${signal}" "${context}" "${resolution}" \
     >> "${outfile}"
+
+  # Also emit to daemon span if running (appears in Jaeger)
+  local entity_id="${TW_ENTITY_ID:-}"
+  if [[ -z "${entity_id}" ]]; then
+    local session_file="${project_root}/.traceweaver/.tw-session"
+    if [[ -f "${session_file}" ]]; then
+      entity_id="$(cat "${session_file}" 2>/dev/null | tr -d '[:space:]')"
+    fi
+  fi
+  if [[ -n "${entity_id}" ]]; then
+    local tw_bin="${project_root}/packages/tw-cli/dist/index.js"
+    local socket_path="${project_root}/.traceweaver/tw.sock"
+    if [[ -f "${tw_bin}" && -S "${socket_path}" ]]; then
+      node "${tw_bin}" emit-event --entity-id "${entity_id}" \
+        --event "harness.signal" \
+        --attr "type=${signal_type}" \
+        --attr "module=${module}" \
+        --attr "signal=$(truncate_str "${signal}" 100)" \
+        2>/dev/null || true
+    fi
+  fi
 }
 
 # Generic JSON string field extractor (pure bash, no jq)

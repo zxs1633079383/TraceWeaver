@@ -1,0 +1,2 @@
+{"ts":"2026-03-30T03:00:00Z","session_id":"prev-session","iteration":1,"signals":5,"errors":2,"rules_changed":"1 rules hit+1, 1 new candidates","next_focus":"cli module has only 2 rules — observe for patterns, types module has only 1 rules — observe for patterns"}
+{"ts":"2026-03-30T04:07:19Z","session_id":"demo-session-001","iteration":2,"signals":4,"errors":2,"rules_changed":"4 new candidates","next_focus":"types module has only 1 rules — observe for patterns, examples module has only 0 rules — observe for patterns"}

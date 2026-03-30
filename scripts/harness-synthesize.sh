@@ -32,6 +32,7 @@ PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 HARNESS_DIR="${PROJECT_ROOT}/docs/harness"
 EXPERIENCE_FILE="${HARNESS_DIR}/experience.ndjson"
 CANDIDATES_FILE="${HARNESS_DIR}/_candidates.md"
+EVOLUTION_LOG="${HARNESS_DIR}/evolution-log.ndjson"
 SESSION_ID="${SESSION_ID:-}"
 
 # Counters
@@ -39,6 +40,8 @@ count_signals=0
 count_new=0
 count_bumped=0
 count_entropy_drift=0
+count_errors=0
+count_prevented=0
 
 # ---------------------------------------------------------------------------
 # Candidate ID management
@@ -156,6 +159,9 @@ append_candidate() {
 - **置信度**: candidate
 - **来源**: session-${SESSION_ID}, ${today}
 - **命中次数**: 1
+- **阻止次数**: 0
+- **效能**: 0
+- **谱系**: session-${SESSION_ID} 自动采集
 - **触发条件**: ${context}
 - **规则**: （待提炼）
 - **原因**: 自动采集自 session ${SESSION_ID}
@@ -303,6 +309,11 @@ main() {
     # Skip empty signals
     [[ -z "${signal}" ]] && continue
 
+    # Track error signals for effectiveness calculation
+    if [[ "${sig_type}" == "error" ]]; then
+      count_errors=$(( count_errors + 1 ))
+    fi
+
     # Deduplicate within session batch (bash 3 compatible)
     local dedup_key="${module}::${signal}"
     if printf '%s\n' "${seen_keys}" | grep -qF "${dedup_key}" 2>/dev/null; then
@@ -343,19 +354,136 @@ ${dedup_key}"
   count_entropy_drift="$(wc -l < "${DRIFT_FILE}" | tr -d ' ')"
   rm -f "${DRIFT_FILE}"
 
-  # ---- Step 4: Summary ----
+  # ---- Step 4: Evolution Log ----
+  local rules_changed=""
+  if [[ ${count_bumped} -gt 0 ]]; then
+    rules_changed="${count_bumped} rules hit+1"
+  fi
+  if [[ ${count_new} -gt 0 ]]; then
+    [[ -n "${rules_changed}" ]] && rules_changed="${rules_changed}, "
+    rules_changed="${rules_changed}${count_new} new candidates"
+  fi
+
+  # Generate next_focus based on gaps and signals
+  local next_focus=""
+
+  # Check coverage gaps: which modules have few rules
+  for mod in daemon cli types examples; do
+    local mod_rule_count=0
+    for rf in "${HARNESS_DIR}/${mod}"/decisions.md \
+              "${HARNESS_DIR}/${mod}"/constraints.md \
+              "${HARNESS_DIR}/${mod}"/patterns.md; do
+      [[ -f "${rf}" ]] || continue
+      local c
+      c="$(grep -cE '^\#\#\# \[R-' "${rf}" 2>/dev/null || true)"
+      mod_rule_count=$(( mod_rule_count + c ))
+    done
+    if [[ ${mod_rule_count} -lt 2 ]]; then
+      [[ -n "${next_focus}" ]] && next_focus="${next_focus}, "
+      next_focus="${next_focus}${mod} module has only ${mod_rule_count} rules — observe for patterns"
+    fi
+  done
+
+  # Check near-upgrade candidates (hit count >= 2)
+  if [[ -f "${CANDIDATES_FILE}" ]]; then
+    local near_upgrade
+    near_upgrade="$(grep -B1 '命中次数.*[2-9]' "${CANDIDATES_FILE}" 2>/dev/null | grep -oE '\[C-[0-9]+\]' || true)"
+    if [[ -n "${near_upgrade}" ]]; then
+      [[ -n "${next_focus}" ]] && next_focus="${next_focus}, "
+      next_focus="${next_focus}${near_upgrade} near upgrade threshold"
+    fi
+  fi
+
+  # Check entropy drift
+  if [[ ${count_entropy_drift} -gt 0 ]]; then
+    [[ -n "${next_focus}" ]] && next_focus="${next_focus}, "
+    next_focus="${next_focus}${count_entropy_drift} entropy drifts need attention"
+  fi
+
+  [[ -z "${next_focus}" ]] && next_focus="no specific focus — continue normal development"
+
+  # Count iteration number
+  local iteration=1
+  if [[ -f "${EVOLUTION_LOG}" ]]; then
+    local existing_count
+    existing_count="$(wc -l < "${EVOLUTION_LOG}" | tr -d ' ')"
+    iteration=$(( existing_count + 1 ))
+  fi
+
+  # Escape for JSON
+  local esc_rules_changed esc_next_focus
+  esc_rules_changed="$(printf '%s' "${rules_changed}" | sed 's/"/\\"/g')"
+  esc_next_focus="$(printf '%s' "${next_focus}" | sed 's/"/\\"/g')"
+
+  local ts
+  ts="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+
+  # Write evolution-log entry
+  printf '{"ts":"%s","session_id":"%s","iteration":%d,"signals":%d,"errors":%d,"rules_changed":"%s","next_focus":"%s"}\n' \
+    "${ts}" "${SESSION_ID}" "${iteration}" "${count_signals}" "${count_errors}" \
+    "${esc_rules_changed}" "${esc_next_focus}" \
+    >> "${EVOLUTION_LOG}"
+
+  # ---- Step 5: Summary ----
   local confirmed_count candidate_count
   confirmed_count="$(count_confirmed_rules)"
   candidate_count="$(count_candidate_rules)"
 
   printf '\n'
   printf '🔧 Harness 熵管理摘要\n'
-  printf '├─ 📥 本次采集: %d 条热信号\n'  "${count_signals}"
+  printf '├─ 📥 本次采集: %d 条热信号 (%d errors)\n' "${count_signals}" "${count_errors}"
   printf '├─ 📋 新增候选: %d 条\n'        "${count_new}"
   printf '├─ ⬆️  升级规则: %d 条\n'       "${count_bumped}"
   printf '├─ ⚠️  熵偏差: %d 处\n'         "${count_entropy_drift}"
   printf '├─ 📊 确认规则: %d 条\n'        "${confirmed_count}"
-  printf '└─ 📝 候选规则: %d 条\n'        "${candidate_count}"
+  printf '├─ 📝 候选规则: %d 条\n'        "${candidate_count}"
+  printf '├─ 📓 演进日志: 第 %d 轮\n'    "${iteration}"
+  printf '└─ 🎯 下轮关注: %s\n'          "${next_focus}"
+
+  # ---- Step 6: Emit evolution event to daemon (span + EventLog) ----
+  # Reads TW_ENTITY_ID or .traceweaver/.tw-session for current session entity
+  local entity_id="${TW_ENTITY_ID:-}"
+  if [[ -z "${entity_id}" ]]; then
+    local session_file="${PROJECT_ROOT}/.traceweaver/.tw-session"
+    if [[ -f "${session_file}" ]]; then
+      entity_id="$(cat "${session_file}" 2>/dev/null | tr -d '[:space:]')"
+    fi
+  fi
+
+  if [[ -n "${entity_id}" ]]; then
+    local socket_path="${PROJECT_ROOT}/.traceweaver/tw.sock"
+    if [[ -S "${socket_path}" ]]; then
+      # tw hook uses IPC sendSilent — we call the CLI directly
+      local tw_bin="${PROJECT_ROOT}/packages/tw-cli/dist/index.js"
+      if [[ -f "${tw_bin}" ]]; then
+        # Emit harness.evolution event → span event in Jaeger + EventLog
+        node "${tw_bin}" emit-event --entity-id "${entity_id}" \
+          --event "harness.evolution" \
+          --attr "iteration=${iteration}" \
+          --attr "signals=${count_signals}" \
+          --attr "errors=${count_errors}" \
+          --attr "new_candidates=${count_new}" \
+          --attr "rules_bumped=${count_bumped}" \
+          --attr "entropy_drift=${count_entropy_drift}" \
+          --attr "confirmed_rules=${confirmed_count}" \
+          --attr "candidate_rules=${candidate_count}" \
+          --attr "next_focus=${next_focus}" \
+          --attr "rules_changed=${rules_changed}" \
+          2>/dev/null || true
+
+        # Also emit next_focus as a separate decision event for visibility
+        if [[ "${next_focus}" != "no specific focus"* ]]; then
+          node "${tw_bin}" emit-event --entity-id "${entity_id}" \
+            --event "harness.next_focus" \
+            --attr "focus=${next_focus}" \
+            --attr "iteration=${iteration}" \
+            2>/dev/null || true
+        fi
+
+        printf '  📡 已写入 daemon span: harness.evolution (entity=%s)\n' "${entity_id}"
+      fi
+    fi
+  fi
 }
 
 main
