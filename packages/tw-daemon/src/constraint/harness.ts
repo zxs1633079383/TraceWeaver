@@ -111,10 +111,19 @@ export class ConstraintHarness {
     evalResult = { ...evalResult, duration_ms: Math.max(Date.now() - start, 1) };
     if (spanId) {
       try {
+        const refAttrs: Record<string, unknown> = {};
+        for (let i = 0; i < evalResult.refs_checked.length; i++) {
+          const ref = evalResult.refs_checked[i];
+          refAttrs[`constraint.ref.${i}.name`] = ref.ref;
+          refAttrs[`constraint.ref.${i}.result`] = ref.result;
+          if (ref.note) refAttrs[`constraint.ref.${i}.note`] = ref.note;
+        }
         this.spanManager.updateAttributes(`constraint:${entity.id}`, {
           'constraint.result': evalResult.result,
           'constraint.duration_ms': evalResult.duration_ms,
           'constraint.refs_count': evalResult.refs_checked.length,
+          ...(evalResult.error ? { 'constraint.error': evalResult.error } : {}),
+          ...refAttrs,
         });
         const spanStatus =
           evalResult.result === 'fail' ? 'ERROR' :
