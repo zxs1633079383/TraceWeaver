@@ -18,15 +18,16 @@ FsWatcher（config.watch.dirs）
     ↓ file.changed
 ImpactResolver（file → entity 反向索引）
     ↓ artifact.modified（per entity）
-TriggerExecutor（harness trigger_on 匹配 + constraint_refs 过滤）
-    ↓ ConstraintEvaluator（LLM）
-    ↓ auto-reject → RemediationEngine（修复队列）
-    ↓ FeedbackLog（harness 评估历史）
-    ↓ NotifyEngine → InboxAdapter
+EventBus → Subscribers
+    ↓ ErrorBubbler（error.captured → 冒泡到父级 span）
+    ↓ ProgressTracker（子实体状态 → 父进度更新）
+    ↓ UsecaseMutationHandler（usecase.mutated → drain 下游）
+    ↓ NotifyEngine → InboxAdapter / WebhookAdapter
 EventLog（NDJSON，可查询）
 SpanManager → OtlpGrpcExporter → Jaeger（OTLP/gRPC）
 TraceQueryEngine（SpanManager live + EntityRegistry fallback）→ tw trace spans/info
 ReportGenerator（四来源聚合）→ tw report daily/list/show
+CC Hook → tw hook post-tool → emit_event → span event（harness.signal / harness.evolution）
 ```
 
 ---

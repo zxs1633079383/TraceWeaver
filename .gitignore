@@ -31,3 +31,4 @@ package-lock.json
 !QUICKSTART.md
 !QUICKSTART.zh-CN.md
 !docs/harness/**/*.md
+.gstack/
