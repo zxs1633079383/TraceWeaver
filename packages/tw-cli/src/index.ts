@@ -18,6 +18,7 @@ import { traceCommand }     from './commands/trace.js'
 import { reportCommand }    from './commands/report.js'
 import { hookCommand }      from './commands/hook.js'
 import { usecaseCommand }   from './commands/usecase.js'
+import { emitEventCommand } from './commands/emit-event.js'
 
 const program = new Command()
 program
@@ -43,5 +44,6 @@ program.addCommand(traceCommand())
 program.addCommand(reportCommand())
 program.addCommand(hookCommand())
 program.addCommand(usecaseCommand())
+program.addCommand(emitEventCommand())
 
 program.parseAsync(process.argv).catch(e => { console.error(e); process.exit(1) })
