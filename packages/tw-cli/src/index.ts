@@ -19,6 +19,7 @@ import { reportCommand }    from './commands/report.js'
 import { hookCommand }      from './commands/hook.js'
 import { usecaseCommand }   from './commands/usecase.js'
 import { emitEventCommand } from './commands/emit-event.js'
+import { constraintCommand } from './commands/constraint.js'
 
 const program = new Command()
 program
@@ -45,5 +46,6 @@ program.addCommand(reportCommand())
 program.addCommand(hookCommand())
 program.addCommand(usecaseCommand())
 program.addCommand(emitEventCommand())
+program.addCommand(constraintCommand())
 
 program.parseAsync(process.argv).catch(e => { console.error(e); process.exit(1) })
