@@ -135,9 +135,20 @@ Task:     task-<具体动作>       例: task-token-gen, task-login-api, task-au
 
 ### 4.1 Hook 配置
 
-在 `.claude/settings.json`（项目级或用户级）中添加：
+在**项目根目录**的 `.claude/settings.json`（项目级配置，非全局 `~/.claude/settings.json`）中添加：
+
+```bash
+# 项目级配置（推荐）
+your-project/.claude/settings.json   ← 这里
+
+# 不要放在全局
+~/.claude/settings.json              ← 不要放这里
+```
+
+原因：不同项目的 TW_STORE 路径不同，hook 配置应跟随项目走，团队成员 clone 即可用。
 
 ```jsonc
+// your-project/.claude/settings.json
 {
   "hooks": {
     "SessionStart": [{
