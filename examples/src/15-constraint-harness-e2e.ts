@@ -29,6 +29,7 @@ import { SpanManager }       from '../../packages/tw-daemon/src/otel/span-manage
 import { EventLog }          from '../../packages/tw-daemon/src/log/event-log.js'
 import { ExporterRegistry }  from '../../packages/tw-daemon/src/otel/exporter-registry.js'
 import { ConsoleExporter }   from '../../packages/tw-daemon/src/otel/exporter-console.js'
+import { OtlpGrpcExporter }  from '../../packages/tw-daemon/src/otel/exporter-grpc.js'
 import { ConstraintEvaluator } from '../../packages/tw-daemon/src/constraint/evaluator.js'
 import { ConstraintHarness }   from '../../packages/tw-daemon/src/constraint/harness.js'
 import type { TwEvent }      from '@traceweaver/types'
@@ -68,8 +69,12 @@ async function main(): Promise<void> {
   // ──────────────────────────────────────────────────────────────────────────
   section('Setup — Component Initialisation')
 
+  const JAEGER_ENDPOINT = process.env.JAEGER_ENDPOINT ?? 'localhost:4317'
   const exporterRegistry = new ExporterRegistry()
   exporterRegistry.register(new ConsoleExporter())
+  const grpcExporter = new OtlpGrpcExporter({ endpoint: JAEGER_ENDPOINT })
+  exporterRegistry.register(grpcExporter)
+  info(`Jaeger gRPC exporter → ${JAEGER_ENDPOINT}`)
 
   const eventBus    = new EventBus({ bufferSize: 512, batchWindowMs: 30 })
   const spanManager = new SpanManager({ projectId: 'constraint-demo', exporterRegistry })
@@ -322,7 +327,10 @@ async function main(): Promise<void> {
     process.exitCode = 1
   }
 
-  // Cleanup
+  // Flush spans to Jaeger and cleanup
+  info('Flushing spans to Jaeger...')
+  await exporterRegistry.shutdown()
+  ok('Spans exported to Jaeger — open http://localhost:16686 to view')
   eventBus.stop()
   await rm(storeDir, { recursive: true, force: true })
 }
