@@ -16,7 +16,8 @@
     "example:07": "tsx examples/src/07-edge-invalid-transitions.ts",
     "example:08": "tsx examples/src/08-edge-propagation-bubble-up.ts",
     "example:09": "tsx examples/src/09-edge-ring-buffer-overflow.ts",
-    "example:10": "tsx examples/src/10-edge-wal-recovery.ts"
+    "example:10": "tsx examples/src/10-edge-wal-recovery.ts",
+    "example:15": "tsx examples/src/15-constraint-harness-e2e.ts"
   },
   "devDependencies": {
     "typescript": "^5.4.0",
