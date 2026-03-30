@@ -116,3 +116,37 @@ describe('trace_id inheritance', () => {
     expect(sm.getSpan('task-orphan')!.trace_id).toBeDefined()
   })
 })
+
+describe('rebindEvents', () => {
+  let sm: SpanManager
+
+  beforeEach(() => { sm = new SpanManager({ export: false }) })
+
+  it('migrates events from old span to new span', () => {
+    sm.createSpan({ entity_id: 'old-1', entity_type: 'task' })
+    sm.addEvent('old-1', 'tool.invoked', { tool: 'Bash' })
+    sm.addEvent('old-1', 'error.captured', { source: 'build' })
+
+    sm.createSpan({ entity_id: 'new-1', entity_type: 'task' })
+    const result = sm.rebindEvents('old-1', 'new-1')
+
+    expect(result).toBe(true)
+    const newSpan = sm.getSpan('new-1')!
+    expect(newSpan.events).toHaveLength(2)
+    expect(newSpan.events[0].name).toBe('tool.invoked')
+    expect(newSpan.events[1].name).toBe('error.captured')
+
+    const oldSpan = sm.getSpan('old-1')!
+    expect(oldSpan.events).toHaveLength(0)
+  })
+
+  it('returns false if old span does not exist', () => {
+    sm.createSpan({ entity_id: 'new-1', entity_type: 'task' })
+    expect(sm.rebindEvents('nonexistent', 'new-1')).toBe(false)
+  })
+
+  it('returns false if new span does not exist', () => {
+    sm.createSpan({ entity_id: 'old-1', entity_type: 'task' })
+    expect(sm.rebindEvents('old-1', 'nonexistent')).toBe(false)
+  })
+})

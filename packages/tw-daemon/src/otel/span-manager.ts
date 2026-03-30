@@ -99,6 +99,15 @@ export class SpanManager {
     return all.filter(s => s.entity_type === entityType)
   }
 
+  rebindEvents(oldEntityId: string, newEntityId: string): boolean {
+    const oldSpan = this.spans.get(oldEntityId)
+    const newSpan = this.spans.get(newEntityId)
+    if (!oldSpan || !newSpan) return false
+    newSpan.events.push(...oldSpan.events)
+    oldSpan.events.length = 0
+    return true
+  }
+
   static stateToStatus(state: Entity['state']): SpanMeta['status'] {
     if (state === 'completed') return 'OK'
     if (state === 'rejected') return 'ERROR'
