@@ -317,3 +317,21 @@ export interface ReportMeta {
   path: string
   generated_at: string  // ISO8601
 }
+
+// ─── Constraints ──────────────────────────────────────────────────────────────
+
+export interface ConstraintValidationResult {
+  result: 'pass' | 'fail' | 'skipped'
+  checked_at: string
+  refs_checked: Array<{ ref: string; result: string; note?: string }>
+}
+
+export interface ConstraintHarnessResult {
+  entity_id: string
+  result: 'pass' | 'fail' | 'skipped'
+  checked_at: string
+  duration_ms: number
+  span_id?: string
+  refs_checked: Array<{ ref: string; result: string; note?: string }>
+  error?: string
+}
