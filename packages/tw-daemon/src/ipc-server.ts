@@ -8,6 +8,7 @@ import type { EventLog } from './log/event-log.js'
 import type { SpanMetrics } from './metrics/span-metrics.js'
 import type { TraceQueryEngine } from './otel/trace-query.js'
 import type { ReportGenerator } from './report/report-generator.js'
+import type { ConstraintHarness } from './constraint/harness.js'
 
 export interface IpcServerOptions {
   inbox?: InboxAdapter
@@ -15,6 +16,7 @@ export interface IpcServerOptions {
   spanMetrics?: SpanMetrics
   traceQuery?: TraceQueryEngine
   reportGenerator?: ReportGenerator
+  constraintHarness?: ConstraintHarness
 }
 
 export class IpcServer {
@@ -24,6 +26,7 @@ export class IpcServer {
   private readonly spanMetrics?: SpanMetrics
   private readonly traceQuery?: TraceQueryEngine
   private readonly reportGenerator?: ReportGenerator
+  private readonly constraintHarness?: ConstraintHarness
 
   constructor(
     private readonly socketPath: string,
@@ -36,6 +39,7 @@ export class IpcServer {
     this.spanMetrics = opts?.spanMetrics
     this.traceQuery = opts?.traceQuery
     this.reportGenerator = opts?.reportGenerator
+    this.constraintHarness = opts?.constraintHarness
   }
 
   async start(): Promise<void> {
@@ -183,6 +187,28 @@ export class IpcServer {
         const result = await this.handler.sessionRebind(params as any)
         if (!result.ok) throw Object.assign(new Error(result.error!.message), { code: result.error!.code })
         data = { rebound: true }
+      } else if (method === 'constraint.evaluate') {
+        if (!this.constraintHarness) throw Object.assign(new Error('ConstraintHarness not available'), { code: 'NOT_AVAILABLE' })
+        const entity_id = (params as any).entity_id
+        if (typeof entity_id !== 'string') {
+          throw Object.assign(new Error('entity_id required'), { code: 'INVALID_PARAMS' })
+        }
+        const entity = this.handler.getEntityById(entity_id)
+        if (!entity) throw Object.assign(new Error(`Entity ${entity_id} not found`), { code: 'ENTITY_NOT_FOUND' })
+        data = await this.constraintHarness.run(entity, {
+          constraintContents: (params as any).constraintContents,
+        })
+      } else if (method === 'constraint.history') {
+        const entity_id = (params as any).entity_id
+        if (typeof entity_id !== 'string') {
+          throw Object.assign(new Error('entity_id required'), { code: 'INVALID_PARAMS' })
+        }
+        const result = await this.handler.queryEvents({
+          entity_id,
+          event_type: 'constraint.evaluated',
+          limit: (params as any).limit ?? 50,
+        })
+        data = result.data ?? result
       } else {
         throw Object.assign(new Error(`Unknown method: ${method}`), { code: 'UNKNOWN_METHOD' })
       }

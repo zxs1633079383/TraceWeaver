@@ -50,7 +50,6 @@ export class ConstraintHarness {
       const spanMeta = this.spanManager.createSpan({
         entity_id: `constraint:${entity.id}`,
         entity_type: 'task',
-        parent_entity_id: entity.id,
       });
       spanId = spanMeta.span_id;
     } catch {

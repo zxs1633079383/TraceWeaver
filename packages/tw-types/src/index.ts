@@ -158,6 +158,7 @@ export type TwEventType =
   | 'session.started'
   | 'session.ended'
   | 'session.rebound'
+  | 'constraint.evaluated'
 
 export interface TwEvent {
   id: string            // uuid

@@ -25,6 +25,8 @@ import { ReportScheduler } from './report/report-scheduler.js'
 import { ErrorBubbler } from './subscribers/error-bubbler.js'
 import { ProgressTracker } from './subscribers/progress-tracker.js'
 import { UsecaseMutationHandler } from './subscribers/usecase-mutation-handler.js'
+import { ConstraintEvaluator } from './constraint/evaluator.js'
+import { ConstraintHarness } from './constraint/harness.js'
 import type { Entity } from '@traceweaver/types'
 
 const PROJECT_ROOT = process.cwd()
@@ -59,6 +61,18 @@ async function main() {
 
   const spanManager = new SpanManager({ projectId: 'default', exporterRegistry })
   const spanMetrics = new SpanMetrics(spanManager)
+
+  const constraintEvaluator = new ConstraintEvaluator({
+    enabled: true,
+    model: 'claude-opus-4-6',
+  })
+
+  const constraintHarness = new ConstraintHarness({
+    evaluator: constraintEvaluator,
+    spanManager,
+    eventBus,
+    timeoutMs: 30_000,
+  })
 
   const handler = new CommandHandler({ storeDir: STORE_DIR, eventBus, spanManager, eventLog })
   await handler.init()
@@ -222,6 +236,7 @@ async function main() {
     spanMetrics,
     traceQuery,
     reportGenerator,
+    constraintHarness,
   })
   await server.start()
 
