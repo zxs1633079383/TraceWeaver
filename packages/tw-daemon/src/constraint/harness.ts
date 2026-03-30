@@ -44,12 +44,14 @@ export class ConstraintHarness {
       };
     }
 
-    // 1. Create span
+    // 1. Create span (as child of entity's span for same trace_id)
     let spanId: string | undefined;
     try {
+      const parentSpan = this.spanManager.getSpan(entity.id);
       const spanMeta = this.spanManager.createSpan({
         entity_id: `constraint:${entity.id}`,
         entity_type: 'task',
+        parent_span_id: parentSpan?.span_id,
       });
       spanId = spanMeta.span_id;
     } catch {
