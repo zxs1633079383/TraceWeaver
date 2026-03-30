@@ -22,6 +22,10 @@ import { homedir } from 'node:os'
 import { TraceQueryEngine } from './otel/trace-query.js'
 import { ReportGenerator } from './report/report-generator.js'
 import { ReportScheduler } from './report/report-scheduler.js'
+import { ErrorBubbler } from './subscribers/error-bubbler.js'
+import { ProgressTracker } from './subscribers/progress-tracker.js'
+import { UsecaseMutationHandler } from './subscribers/usecase-mutation-handler.js'
+import type { Entity } from '@traceweaver/types'
 
 const PROJECT_ROOT = process.cwd()
 const STORE_DIR    = process.env.TW_STORE ?? join(PROJECT_ROOT, '.traceweaver')
@@ -58,6 +62,48 @@ async function main() {
 
   const handler = new CommandHandler({ storeDir: STORE_DIR, eventBus, spanManager, eventLog })
   await handler.init()
+
+  // ── Subscribers ─────────────────────────────────────────────────────────
+  const errorBubbler = new ErrorBubbler({
+    spanManager,
+    getEntity: (id: string) => handler.getEntityById(id),
+    updateAttributes: (id: string, attrs: Record<string, unknown>) => {
+      void handler.updateAttributes({ id, attributes: attrs })
+    },
+  })
+  eventBus.subscribe(event => errorBubbler.handle(event))
+
+  const progressTracker = new ProgressTracker({
+    getEntity: (id: string) => handler.getEntityById(id),
+    getChildrenOf: (parentId: string) => handler.getAllEntities().filter(e => e.parent_id === parentId),
+    updateAttributes: (id: string, attrs: Record<string, unknown>) => {
+      void handler.updateAttributes({ id, attributes: attrs })
+    },
+  })
+  eventBus.subscribe(event => progressTracker.handle(event))
+
+  const usecaseMutationHandler = new UsecaseMutationHandler({
+    getEntity: (id: string) => handler.getEntityById(id),
+    getDescendants: (id: string) => {
+      const result: Entity[] = []
+      const collect = (parentId: string) => {
+        const children = handler.getAllEntities().filter(e => e.parent_id === parentId)
+        for (const child of children) {
+          result.push(child)
+          collect(child.id)
+        }
+      }
+      collect(id)
+      return result
+    },
+    updateState: (id: string, state: string, reason: string) => {
+      void handler.updateState({ id, state: state as any, reason })
+    },
+    spanAddEvent: (entityId: string, name: string, attrs: Record<string, unknown>) => {
+      spanManager.addEvent(entityId, name, attrs)
+    },
+  })
+  eventBus.subscribe(event => usecaseMutationHandler.handle(event))
 
   const traceQuery = new TraceQueryEngine({
     spanManager,
