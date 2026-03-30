@@ -28,6 +28,7 @@ import { ExporterRegistry }        from '../../packages/tw-daemon/src/otel/expor
 import { OtlpGrpcExporter }       from '../../packages/tw-daemon/src/otel/exporter-grpc.js'
 import { ConstraintEvaluator }     from '../../packages/tw-daemon/src/constraint/evaluator.js'
 import { ConstraintHarness }       from '../../packages/tw-daemon/src/constraint/harness.js'
+import { TraceQueryEngine }         from '../../packages/tw-daemon/src/otel/trace-query.js'
 import { ErrorBubbler }            from '../../packages/tw-daemon/src/subscribers/error-bubbler.js'
 import { ProgressTracker }         from '../../packages/tw-daemon/src/subscribers/progress-tracker.js'
 import { UsecaseMutationHandler }  from '../../packages/tw-daemon/src/subscribers/usecase-mutation-handler.js'
@@ -371,7 +372,7 @@ async function main(): Promise<void> {
     constraintFailCount++
     fail(`task-schema-test constraint: FAIL — "${r5.refs_checked[0]?.note ?? 'unknown'}"`)
 
-    // Simulate error bubbling: publish error.captured event
+    // Publish error.captured event (message from harness result, not hardcoded)
     eventBus.publish({
       id: crypto.randomUUID(),
       type: 'error.captured',
@@ -380,7 +381,9 @@ async function main(): Promise<void> {
       ts: new Date().toISOString(),
       attributes: {
         source: 'constraint',
-        message: 'Test file has no assertion for edge case: empty title string',
+        message: r5.refs_checked[0]?.note ?? 'constraint evaluation failed',
+        constraint_ref: r5.refs_checked[0]?.ref,
+        constraint_result: r5.result,
       },
     })
     await wait(80)
@@ -399,12 +402,51 @@ async function main(): Promise<void> {
     warn(`Expected task-schema-test to FAIL but got: ${r5.result}`)
   }
 
-  // "Fix" the issue
-  subsection('Fix: task-schema-test — add missing assertion')
-  schemaTestFixed = true
-  info('Developer fixes test file: adds assertion for empty title edge case')
+  // Step 1: Agent queries trace info for structured error context (per real-project-integration-guide.md)
+  subsection('Agent queries: tw trace info --entity-id task-schema-test')
+  const traceQuery = new TraceQueryEngine({
+    spanManager,
+    getAllEntities: () => handler.getAllEntities(),
+    getEntity: (id: string) => handler.getEntityById(id),
+  })
+  const traceId = traceQuery.findTraceId('task-schema-test')
+  if (traceId) {
+    const traceInfo = traceQuery.buildTraceInfo(traceId)
+    if (traceInfo) {
+      ok(`trace_id: ${traceId}`)
+      info(`  _ai_context.one_line: "${traceInfo._ai_context.one_line}"`)
+      if (traceInfo._ai_context.next_actions.length > 0) {
+        for (const action of traceInfo._ai_context.next_actions) {
+          info(`  next_action: ${action}`)
+        }
+      }
+      if (traceInfo._ai_context.error_refs.length > 0) {
+        for (const ref of traceInfo._ai_context.error_refs) {
+          info(`  error_ref: ${ref}`)
+        }
+      }
+    }
+  }
 
-  // Re-evaluate after fix
+  // Step 2: Agent reads constraint span attributes for specific failure detail
+  const constraintSpan = spanManager.getSpan(`constraint:task-schema-test`)
+  if (constraintSpan) {
+    const refName = constraintSpan.attributes['constraint.ref.0.name']
+    const refResult = constraintSpan.attributes['constraint.ref.0.result']
+    const refNote = constraintSpan.attributes['constraint.ref.0.note']
+    ok(`Constraint span attributes:`)
+    info(`  ref: ${refName} → ${refResult}`)
+    info(`  note: "${refNote}"`)
+    info(`  → Agent now knows exactly what to fix`)
+  }
+
+  // Step 3: Agent fixes the code based on structured error info
+  subsection('Fix: task-schema-test — add missing assertion (based on trace info)')
+  schemaTestFixed = true
+  info('Agent reads constraint.ref.0.note: "no assertion for edge case: empty title string"')
+  info('Agent adds: expect(validate("")).toBe(false) to todo.test.ts')
+
+  // Step 4: Re-evaluate after fix
   const r5fix = await harness.run(taskSchemaTest, { constraintContents: CONSTRAINT_CONTENTS })
   if (r5fix.result === 'pass') {
     constraintPassCount++
@@ -643,7 +685,7 @@ async function main(): Promise<void> {
   const supersededTasks = handler.getAllEntities().filter(e => e.entity_type === 'task' && e.state === 'superseded').length
 
   const ucSpan = spanManager.getSpan('uc-crud')
-  const traceId = ucSpan?.trace_id ?? 'unknown'
+  const mainTraceId = ucSpan?.trace_id ?? 'unknown'
 
   console.log(`
 ${C.bold}${C.green}  Demo Complete!${C.reset}
@@ -668,7 +710,7 @@ ${C.bold}${C.green}  Demo Complete!${C.reset}
   ┌──────────────────────────────────────────────────────────────┐
   │  Service:    traceweaver-daemon                              │
   │  Project:    ${PROJECT_ID.padEnd(48)}│
-  │  Trace ID:   ${traceId.padEnd(48)}│
+  │  Trace ID:   ${mainTraceId.padEnd(48)}│
   │  Jaeger UI:  http://localhost:16686                          │
   └──────────────────────────────────────────────────────────────┘
 `)
