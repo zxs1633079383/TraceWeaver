@@ -63,30 +63,78 @@ pending     → superseded   # 调用方决定未开始的实体不再需要
 ```jsonc
 {
   "hooks": {
+    "SessionStart": [{
+      "command": "tw hook session-start"
+    }],
     "PreToolUse": [{
       "matcher": "*",
-      "command": "tw hook pre-tool --entity-id=$TW_ENTITY_ID --tool=$TOOL_NAME"
+      "command": "tw hook pre-tool --tool=$TOOL_NAME"
     }],
     "PostToolUse": [{
       "matcher": "*",
-      "command": "tw hook post-tool --entity-id=$TW_ENTITY_ID --tool=$TOOL_NAME --exit-code=$EXIT_CODE"
+      "command": "tw hook post-tool --tool=$TOOL_NAME --exit-code=$EXIT_CODE"
     }],
     "Stop": [{
       "matcher": "",
-      "command": "tw hook stop --entity-id=$TW_ENTITY_ID"
+      "command": "tw hook stop"
     }]
   }
 }
 ```
 
-### TW_ENTITY_ID 传递
+### 实体注册：混合模式（人类零操作）
 
-显式声明模式，调用方在会话前设定环境变量：
+**两层机制：SessionStart hook 兜底 + Agent 主动注册补全。**
+
+#### 层 1：SessionStart Hook — 匿名会话实体
+
+会话启动时 `tw hook session-start` 自动执行：
+
+1. 生成匿名实体 `session-<uuid>`，类型 `task`，无 parent
+2. 将 entity_id 写入 `.traceweaver/.tw-session`（临时文件）
+3. 后续 PreToolUse/PostToolUse/Stop hook 从 `.tw-session` 读取 entity_id
+4. 所有工具调用事件立即开始采集到这个匿名实体上
 
 ```bash
-export TW_ENTITY_ID=task-42
-tw register --id=task-42 --type=task --parent-id=plan-7
-# 启动 Claude Code 会话，hook 自动采集
+# tw hook session-start 内部逻辑（伪代码）
+SESSION_ID="session-$(uuidgen | tr '[:upper:]' '[:lower:]')"
+tw register --id=$SESSION_ID --type=task
+echo $SESSION_ID > .traceweaver/.tw-session
+```
+
+#### 层 2：Agent 主动注册 — 补全或替换
+
+Agent（Claude Code）在 CLAUDE.md 约束下，明确任务后主动补全：
+
+```markdown
+# CLAUDE.md 约束
+收到任务后，判断当前任务属于哪个 UseCase/Plan，执行：
+1. tw register --id=<task-id> --type=task --parent-id=<plan-id>
+2. tw hook rebind --entity-id=<task-id>
+   → 将 .tw-session 更新为正式实体 id
+   → 匿名实体上已采集的事件迁移到正式实体的 span 上
+```
+
+#### rebind 语义
+
+`tw hook rebind --entity-id=<new-id>` 是关键操作：
+
+1. 读取 `.tw-session` 中的旧 entity_id（匿名）
+2. 将 SpanManager 中旧实体的所有 events 迁移到新实体的 span
+3. 更新 `.tw-session` 为新 entity_id
+4. 后续 hook 事件自动打到新实体上
+5. 旧匿名实体标记为 `superseded`
+
+**如果 Agent 始终没有 rebind**（比如简单问答会话），匿名实体在 Stop hook 时自动结束，不影响任何 Plan/UseCase。
+
+#### entity_id 读取顺序
+
+所有 hook 按以下优先级获取 entity_id：
+
+```
+1. 环境变量 TW_ENTITY_ID（调用方显式设定，最高优先）
+2. .traceweaver/.tw-session 文件内容（SessionStart 或 rebind 写入）
+3. 缺失 → hook 静默跳过，不阻塞 Claude Code
 ```
 
 ### Hook → Daemon 事件映射
@@ -291,7 +339,9 @@ export type EntityState =
 | 'entity.superseded'
 | 'tool.invoked'
 | 'tool.completed'
+| 'session.started'
 | 'session.ended'
+| 'session.rebound'
 ```
 
 ### IPC 方法
@@ -300,6 +350,7 @@ export type EntityState =
 // 新增
 'usecase_mutate'    // insert / update 入口
 'usecase_replace'   // supersede + 新建
+'session_rebind'    // 匿名实体 → 正式实体迁移
 ```
 
 ---
@@ -313,9 +364,11 @@ export type EntityState =
 | `error-bubbler.ts` | `tw-daemon/src/subscribers/` | 监听 error.captured，沿 parent chain 冒泡 | 不改实体 state |
 | `progress-tracker.ts` | `tw-daemon/src/subscribers/` | 监听 state_changed/registered/removed，重算进度 | 不做决策 |
 | `usecase-mutation-handler.ts` | `tw-daemon/src/subscribers/` | 监听 usecase.mutated，执行 drain | 不创建新实体 |
-| `hooks/pre-tool.ts` | `tw-cli/src/hooks/` | CC Hook PreToolUse CLI 子命令 | 快速返回，失败静默 |
-| `hooks/post-tool.ts` | `tw-cli/src/hooks/` | CC Hook PostToolUse CLI 子命令 | 快速返回，失败静默 |
-| `hooks/stop.ts` | `tw-cli/src/hooks/` | CC Hook Stop CLI 子命令 | 快速返回，失败静默 |
+| `hooks/session-start.ts` | `tw-cli/src/hooks/` | SessionStart: 创建匿名实体 + 写 .tw-session | 快速返回，失败静默 |
+| `hooks/pre-tool.ts` | `tw-cli/src/hooks/` | PreToolUse: 从 .tw-session 读 id + 采集 | 快速返回，失败静默 |
+| `hooks/post-tool.ts` | `tw-cli/src/hooks/` | PostToolUse: 错误分类 + 采集 | 快速返回，失败静默 |
+| `hooks/stop.ts` | `tw-cli/src/hooks/` | Stop: 结束会话 | 快速返回，失败静默 |
+| `hooks/rebind.ts` | `tw-cli/src/hooks/` | rebind: 事件迁移 + 更新 .tw-session | 快速返回，失败静默 |
 
 ### 变更模块
 
