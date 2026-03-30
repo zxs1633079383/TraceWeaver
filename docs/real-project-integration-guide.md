@@ -454,3 +454,39 @@ tw daemon stop
 | ProgressTracker | 监听 state_changed/registered/removed，递归更新进度 |
 | UsecaseMutationHandler | 监听 usecase.mutated，drain in_progress/review → paused |
 | ExporterRegistry | 支持 console / otlp-http / otlp-grpc 三种模式 |
+| ConstraintHarness | 约束评估 Runtime 层：span + event + 30s timeout + 容错隔离 |
+| ConstraintEvaluator | 约束评估 Eval 层：读约束文件 → 调 LLM → pass/fail/skipped |
+
+### 约束评估集成
+
+在 Task 完成前可以运行约束评估：
+
+```bash
+# 评估单个 task 的约束
+tw constraint evaluate <task-id> --json
+
+# 查询约束评估历史
+tw constraint history <task-id> --json
+
+# 查看最新评估详情
+tw constraint show <task-id> --json
+```
+
+**注册时附加 constraint_refs:**
+```bash
+tw register task task-xxx --parent plan-xxx \
+  --attributes '{"constraint_refs": ["docs/coding-rules.md"]}'
+```
+
+**约束失败恢复流程:**
+```
+约束评估 → FAIL
+  → ErrorBubbler 冒泡到 Plan/UC span
+  → Agent 查询 tw trace info (获取 _ai_context)
+  → Agent 查询 tw constraint show (获取 ref.note 失败原因)
+  → Agent 修复代码
+  → tw constraint evaluate (重新评估 → pass)
+  → tw update completed
+```
+
+详见 [CONSTRAINT-HARNESS-STABLE.md](./CONSTRAINT-HARNESS-STABLE.md)

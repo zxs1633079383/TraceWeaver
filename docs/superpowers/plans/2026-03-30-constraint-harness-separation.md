@@ -1,5 +1,9 @@
 # ConstraintEvaluator 职责分离 Implementation Plan
 
+> **状态:** ✅ COMPLETED (2026-03-30) — 所有 8 个 Task 已完成，292 测试通过
+> **稳定版文档:** [../../CONSTRAINT-HARNESS-STABLE.md](../../CONSTRAINT-HARNESS-STABLE.md)
+> **注意:** 实现过程中发现并修复了 7 个额外问题（见稳定版文档"修复记录"）
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Split ConstraintEvaluator into two layers — ConstraintHarness (runtime: span/event/IPC) and ConstraintEvaluator (eval: pure LLM assessment) — so evaluation failures never block the main runtime.

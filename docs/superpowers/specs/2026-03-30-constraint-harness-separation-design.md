@@ -1,8 +1,9 @@
 # ConstraintEvaluator 职责分离设计
 
 **日期:** 2026-03-30
-**状态:** approved
+**状态:** implemented ✅ (已实现，以 CONSTRAINT-HARNESS-STABLE.md 为准)
 **范围:** tw-daemon / tw-cli / tw-types
+**稳定版文档:** [../CONSTRAINT-HARNESS-STABLE.md](../CONSTRAINT-HARNESS-STABLE.md)
 
 ## 问题
 
