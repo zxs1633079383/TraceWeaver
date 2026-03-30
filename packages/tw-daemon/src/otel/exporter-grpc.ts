@@ -112,7 +112,7 @@ export class OtlpGrpcExporter implements TraceExporter {
       parent_span_id: meta.parent_span_id
         ? Buffer.from(meta.parent_span_id, 'hex')
         : Buffer.alloc(0),
-      name: `tw.${meta.entity_type}`,
+      name: `${meta.entity_type}/${meta.entity_id}`,
       kind: 1, // SPAN_KIND_INTERNAL
       start_time_unix_nano: startNs.toString(),
       end_time_unix_nano: endNs.toString(),

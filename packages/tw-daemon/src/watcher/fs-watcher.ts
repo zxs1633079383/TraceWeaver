@@ -34,7 +34,8 @@ export class FsWatcher {
 
     this.watcher = chokidar.watch(this.watchDirs, {
       ignoreInitial: true,
-      persistent: false,
+      persistent: true,
+      usePolling: process.env.TW_FS_POLL === '1',
       awaitWriteFinish: { stabilityThreshold: 100, pollInterval: 50 },
       ignored,
     })

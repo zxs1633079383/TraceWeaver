@@ -170,7 +170,7 @@ describe('OtlpGrpcExporter', () => {
     expect(protoSpan.span_id).toHaveLength(8)   // 64-bit span id → 8 bytes
     expect(Buffer.isBuffer(protoSpan.parent_span_id)).toBe(true)
     expect(protoSpan.parent_span_id.length).toBeGreaterThan(0)
-    expect(protoSpan.name).toBe('tw.task')
+    expect(protoSpan.name).toBe('task/task-1')
     expect(protoSpan.kind).toBe(1)
     expect(typeof protoSpan.start_time_unix_nano).toBe('string')
     expect(typeof protoSpan.end_time_unix_nano).toBe('string')
