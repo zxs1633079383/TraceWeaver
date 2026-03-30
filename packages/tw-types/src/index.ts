@@ -10,6 +10,8 @@ export type EntityState =
   | 'review'
   | 'completed'
   | 'rejected'
+  | 'paused'
+  | 'superseded'
 
 // TODO: Used in Phase 2 (OTel + Event System) for UseCase mutation tracking
 export type UsecaseMutation = 'new' | 'replace' | 'modify' | 'append'
@@ -89,6 +91,24 @@ export interface RemoveEntityParams {
   id: string
 }
 
+export interface UsecaseMutateParams {
+  id: string
+  mutation_type: 'insert' | 'update'
+  context?: string
+  entities?: RegisterParams[]
+}
+
+export interface UsecaseReplaceParams {
+  id: string
+  supersede: string[]
+  new_entities?: RegisterParams[]
+}
+
+export interface SessionRebindParams {
+  old_entity_id: string
+  new_entity_id: string
+}
+
 // ─── WAL ──────────────────────────────────────────────────────────────────
 
 export interface WalEntry {
@@ -120,6 +140,8 @@ export type TwEventType =
   | 'entity.updated'
   | 'entity.state_changed'
   | 'entity.removed'
+  | 'entity.paused'
+  | 'entity.superseded'
   | 'artifact.created'
   | 'artifact.modified'
   | 'artifact.linked'
@@ -129,6 +151,13 @@ export type TwEventType =
   | 'file.changed'
   | 'entity.upstream_changed'
   | 'report.generated'
+  | 'error.captured'
+  | 'usecase.mutated'
+  | 'tool.invoked'
+  | 'tool.completed'
+  | 'session.started'
+  | 'session.ended'
+  | 'session.rebound'
 
 export interface TwEvent {
   id: string            // uuid
