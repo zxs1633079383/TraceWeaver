@@ -1,5 +1,5 @@
 // packages/tw-daemon/src/mcp/server.test.ts
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { McpServer } from './server.js'
 import { CommandHandler } from '../core/command-handler.js'
 import { mkdtemp, rm } from 'node:fs/promises'
@@ -85,5 +85,152 @@ describe('McpServer tool dispatch', () => {
     const result = await mcp.callTool('tw_unknown_xyz', {})
     expect(result.ok).toBe(false)
     expect((result as any).error.code).toBe('UNKNOWN_TOOL')
+  })
+})
+
+describe('tw_query_traces', () => {
+  let tmpDir: string
+  let mcp: McpServer
+
+  beforeEach(async () => {
+    const s = await makeServer()
+    tmpDir = s.tmpDir
+    mcp = s.mcp
+  })
+
+  afterEach(() => {
+    rm(tmpDir, { recursive: true, force: true })
+    vi.restoreAllMocks()
+  })
+
+  it('returns error when service is missing', async () => {
+    const result = await mcp.callTool('tw_query_traces', {})
+    expect(result.ok).toBe(false)
+    expect((result as any).error.code).toBe('MISSING_PARAM')
+  })
+
+  it('returns error for invalid since format', async () => {
+    const result = await mcp.callTool('tw_query_traces', { service: 'my-svc', since: 'abc' })
+    expect(result.ok).toBe(false)
+    expect((result as any).error.code).toBe('INVALID_PARAM')
+  })
+
+  it('returns simplified traces on success', async () => {
+    const jaegerResponse = {
+      data: [
+        {
+          traceID: 'abc123',
+          spans: [
+            { operationName: 'GET /api', duration: 5000, tags: [] },
+            { operationName: 'db.query', duration: 3000, tags: [{ key: 'error', value: true }] },
+          ],
+        },
+      ],
+    }
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce({
+      ok: true,
+      json: async () => jaegerResponse,
+    } as Response)
+
+    const result = await mcp.callTool('tw_query_traces', { service: 'my-svc' })
+    expect(result.ok).toBe(true)
+    const data = (result as any).data
+    expect(data).toHaveLength(1)
+    expect(data[0].trace_id).toBe('abc123')
+    expect(data[0].span_count).toBe(2)
+    expect(data[0].total_duration_us).toBe(5000)
+    expect(data[0].has_error).toBe(true)
+    expect(data[0].spans).toHaveLength(2)
+    expect(data[0].spans[0].operation).toBe('GET /api')
+  })
+
+  it('returns connect error when Jaeger is unreachable', async () => {
+    vi.spyOn(globalThis, 'fetch').mockRejectedValueOnce(new Error('ECONNREFUSED'))
+
+    const result = await mcp.callTool('tw_query_traces', { service: 'my-svc' })
+    expect(result.ok).toBe(false)
+    expect((result as any).error.code).toBe('JAEGER_CONNECT_ERROR')
+    expect((result as any).error.message).toContain('ECONNREFUSED')
+  })
+
+  it('returns error on non-ok HTTP response', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce({
+      ok: false,
+      status: 500,
+      text: async () => 'internal error',
+    } as Response)
+
+    const result = await mcp.callTool('tw_query_traces', { service: 'my-svc' })
+    expect(result.ok).toBe(false)
+    expect((result as any).error.code).toBe('JAEGER_ERROR')
+  })
+})
+
+describe('tw_query_metrics', () => {
+  let tmpDir: string
+  let mcp: McpServer
+
+  beforeEach(async () => {
+    const s = await makeServer()
+    tmpDir = s.tmpDir
+    mcp = s.mcp
+  })
+
+  afterEach(() => {
+    rm(tmpDir, { recursive: true, force: true })
+    vi.restoreAllMocks()
+  })
+
+  it('returns error when query is missing', async () => {
+    const result = await mcp.callTool('tw_query_metrics', {})
+    expect(result.ok).toBe(false)
+    expect((result as any).error.code).toBe('MISSING_PARAM')
+  })
+
+  it('returns error for invalid time format', async () => {
+    const result = await mcp.callTool('tw_query_metrics', { query: 'up', time: 'not-a-date' })
+    expect(result.ok).toBe(false)
+    expect((result as any).error.code).toBe('INVALID_PARAM')
+  })
+
+  it('returns simplified metrics on success', async () => {
+    const promResponse = {
+      status: 'success',
+      data: {
+        resultType: 'vector',
+        result: [
+          { metric: { __name__: 'up', instance: 'localhost:9090' }, value: [1234567890, '1'] },
+        ],
+      },
+    }
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce({
+      ok: true,
+      json: async () => promResponse,
+    } as Response)
+
+    const result = await mcp.callTool('tw_query_metrics', { query: 'up' })
+    expect(result.ok).toBe(true)
+    const data = (result as any).data
+    expect(data.result_type).toBe('vector')
+    expect(data.results).toHaveLength(1)
+  })
+
+  it('returns connect error when Prometheus is unreachable', async () => {
+    vi.spyOn(globalThis, 'fetch').mockRejectedValueOnce(new Error('ECONNREFUSED'))
+
+    const result = await mcp.callTool('tw_query_metrics', { query: 'up' })
+    expect(result.ok).toBe(false)
+    expect((result as any).error.code).toBe('PROMETHEUS_CONNECT_ERROR')
+  })
+
+  it('returns error on Prometheus query failure status', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ status: 'error', errorType: 'bad_data', error: 'parse error' }),
+    } as Response)
+
+    const result = await mcp.callTool('tw_query_metrics', { query: 'invalid{' })
+    expect(result.ok).toBe(false)
+    expect((result as any).error.code).toBe('PROMETHEUS_ERROR')
   })
 })

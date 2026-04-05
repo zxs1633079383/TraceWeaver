@@ -336,3 +336,24 @@ export interface ConstraintHarnessResult {
   refs_checked: Array<{ ref: string; result: string; note?: string }>
   error?: string
 }
+
+// ─── Trace Verification ──────────────────────────────────────────────────────
+
+export interface TraceVerifyInput {
+  service: string
+  operation?: string
+  startTime: number  // epoch ms
+  endTime: number    // epoch ms
+  expectations: {
+    noErrors?: boolean
+    maxDuration?: number  // ms
+    expectedSpans?: string[]  // span operation names that must appear
+  }
+}
+
+export interface TraceVerifyResult {
+  pass: boolean
+  spans: Array<{ operationName: string; duration: number; error: boolean }>
+  failures: string[]  // human-readable failure reasons
+  queriedAt: string   // ISO8601
+}
