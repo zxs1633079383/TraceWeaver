@@ -1,8 +1,24 @@
 {
-  "name": "@traceweaver/types",
+  "name": "@lichao176/traceweaver-types",
   "version": "0.1.0",
   "type": "module",
-  "exports": { ".": "./src/index.ts" },
-  "scripts": { "build": "tsc" },
-  "devDependencies": { "typescript": "*" }
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": ["dist", "src"],
+  "scripts": {
+    "build": "tsc",
+    "prepublishOnly": "tsc"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0"
+  }
 }
